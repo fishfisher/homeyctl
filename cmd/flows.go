@@ -251,6 +251,11 @@ Examples:
 			return fmt.Errorf("invalid JSON: %w", err)
 		}
 
+		// Validate flow structure
+		if err := validateFlow(flow, advanced); err != nil {
+			return err
+		}
+
 		// Normalize simple flow structure (add required group fields)
 		if !advanced {
 			normalizeSimpleFlow(flow)
@@ -279,6 +284,75 @@ Examples:
 		fmt.Printf("Created %s: %s (ID: %s)\n", flowType, created.Name, created.ID)
 		return nil
 	},
+}
+
+// validateFlow checks flow structure and returns helpful error messages
+func validateFlow(flow map[string]interface{}, advanced bool) error {
+	// Required: name
+	name, ok := flow["name"].(string)
+	if !ok || name == "" {
+		return fmt.Errorf("validation error: 'name' is required and must be a string")
+	}
+
+	// Required: trigger (for simple flows)
+	if !advanced {
+		trigger, ok := flow["trigger"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("validation error: 'trigger' is required and must be an object")
+		}
+
+		triggerID, ok := trigger["id"].(string)
+		if !ok || triggerID == "" {
+			return fmt.Errorf("validation error: 'trigger.id' is required")
+		}
+		if !strings.HasPrefix(triggerID, "homey:") {
+			return fmt.Errorf("validation error: 'trigger.id' must start with 'homey:' (got: %s)", triggerID)
+		}
+	}
+
+	// Validate conditions
+	if conditions, ok := flow["conditions"].([]interface{}); ok {
+		for i, c := range conditions {
+			cond, ok := c.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("validation error: conditions[%d] must be an object", i)
+			}
+
+			condID, ok := cond["id"].(string)
+			if !ok || condID == "" {
+				return fmt.Errorf("validation error: conditions[%d].id is required", i)
+			}
+
+			// Check droptoken format for logic conditions
+			if strings.Contains(condID, "logic:") {
+				if droptoken, ok := cond["droptoken"].(string); ok {
+					if strings.Contains(droptoken, "homey:device:") && !strings.Contains(droptoken, "|") {
+						return fmt.Errorf("validation error: conditions[%d].droptoken uses wrong format. Use pipe (|) before capability: 'homey:device:<id>|<capability>'", i)
+					}
+				}
+			}
+		}
+	}
+
+	// Validate actions
+	if actions, ok := flow["actions"].([]interface{}); ok {
+		for i, a := range actions {
+			action, ok := a.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("validation error: actions[%d] must be an object", i)
+			}
+
+			actionID, ok := action["id"].(string)
+			if !ok || actionID == "" {
+				return fmt.Errorf("validation error: actions[%d].id is required", i)
+			}
+			if !strings.HasPrefix(actionID, "homey:") {
+				return fmt.Errorf("validation error: actions[%d].id must start with 'homey:' (got: %s)", i, actionID)
+			}
+		}
+	}
+
+	return nil
 }
 
 // normalizeSimpleFlow adds required fields that Homey expects
