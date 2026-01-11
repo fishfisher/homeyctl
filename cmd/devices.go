@@ -11,11 +11,11 @@ import (
 )
 
 type Device struct {
-	ID              string                 `json:"id"`
-	Name            string                 `json:"name"`
-	Class           string                 `json:"class"`
-	Zone            string                 `json:"zone"`
-	CapabilitiesObj map[string]Capability  `json:"capabilitiesObj"`
+	ID              string                `json:"id"`
+	Name            string                `json:"name"`
+	Class           string                `json:"class"`
+	Zone            string                `json:"zone"`
+	CapabilitiesObj map[string]Capability `json:"capabilitiesObj"`
 }
 
 type Capability struct {

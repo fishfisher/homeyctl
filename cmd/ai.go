@@ -22,13 +22,54 @@ func init() {
 const aiContext = `# homeyctl - AI Assistant Context
 
 ## Overview
-CLI for controlling Homey smart home via local API. Requires configuration first.
+CLI for controlling Homey smart home via local API.
 
-## Setup
+## IMPORTANT: Scoped Tokens for AI Bots
+
+AI assistants should use **restricted tokens** to prevent accidental damage.
+
+### Creating a Scoped Token
+
+The user (human) should run this command to create a token for you:
 ` + "```" + `bash
-homeyctl config set-host <homey-ip>    # e.g., 192.168.1.100
-homeyctl config set-token <api-token>  # From Homey Developer Tools
-homeyctl config show                   # Verify configuration
+homeyctl token create "AI Bot" --preset readonly --no-save
+` + "```" + `
+
+This outputs a token that only has READ access. The AI cannot:
+- Control devices
+- Delete devices/flows/zones
+- Trigger flows
+- Modify anything
+
+### Available Presets
+
+| Preset | Access Level | Use Case |
+|--------|--------------|----------|
+| readonly | Read only | Safe for AI exploration |
+| control | Read + control | AI can control devices, trigger flows |
+| full | Full access | Same as owner (dangerous) |
+
+### Using the Token
+
+After creating, configure homeyctl with the scoped token:
+` + "```" + `bash
+homeyctl config set-token <the-token-from-above>
+` + "```" + `
+
+### Verifying Your Access Level
+
+If you try an operation you don't have access to, you'll get:
+` + "```" + `
+Error: 403 Missing Scopes
+` + "```" + `
+
+This is expected behavior with a readonly token.
+
+## Quick Setup (Full Access)
+
+For users who want full access:
+` + "```" + `bash
+homeyctl login
 ` + "```" + `
 
 ## Available Commands

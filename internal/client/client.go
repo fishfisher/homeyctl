@@ -329,3 +329,22 @@ func (c *Client) SetElectricityPriceFixed(price float64) error {
 	_, err := c.doRequest("PUT", "/api/manager/energy/option/electricityPriceFixed", body)
 	return err
 }
+
+// Personal Access Tokens (PAT)
+
+func (c *Client) ListPATs() (json.RawMessage, error) {
+	return c.doRequest("GET", "/api/manager/users/pat", nil)
+}
+
+func (c *Client) CreatePAT(name string, scopes []string) (json.RawMessage, error) {
+	body := map[string]interface{}{
+		"name":   name,
+		"scopes": scopes,
+	}
+	return c.doRequest("POST", "/api/manager/users/pat", body)
+}
+
+func (c *Client) DeletePAT(id string) error {
+	_, err := c.doRequest("DELETE", "/api/manager/users/pat/"+id, nil)
+	return err
+}

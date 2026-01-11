@@ -31,22 +31,18 @@ func SetVersionInfo(version, commit, date string) {
 }
 
 const setupInstructions = `
-Welcome to homeyctl! To get started, you need to configure your Homey connection.
+Welcome to homeyctl! To get started, run:
 
-1. SET YOUR HOMEY'S IP ADDRESS
-   Find it in the Homey app: Settings → General → scroll down
-   Then run:
-     homeyctl config set-host <ip-address>
+  homeyctl login
 
-2. CREATE AN API KEY
-   Go to https://my.homey.app/
-   → Settings (gear icon) → API Keys → + New API Key
-   Then run:
-     homeyctl config set-token <your-token>
+This will open your browser to log in with your Athom account.
 
-3. VERIFY YOUR SETUP
-     homeyctl config show
-     homeyctl devices list
+After login, try:
+  homeyctl devices list
+  homeyctl flows list
+
+For AI bots (read-only access):
+  homeyctl token create "AI Bot" --preset readonly --no-save
 
 For more help: homeyctl --help
 `
@@ -72,7 +68,8 @@ var rootCmd = &cobra.Command{
 		cmdPath := cmd.CommandPath()
 		if cmd.Name() == "config" || cmd.Name() == "version" || cmd.Name() == "help" ||
 			cmd.Name() == "set-token" || cmd.Name() == "set-host" || cmd.Name() == "show" ||
-			cmd.Name() == "completion" || cmd.Name() == "ai" || cmdPath == "homeyctl" {
+			cmd.Name() == "completion" || cmd.Name() == "ai" || cmd.Name() == "scopes" ||
+			cmd.Name() == "login" || cmd.Name() == "create" || cmdPath == "homeyctl" {
 			return nil
 		}
 

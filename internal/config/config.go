@@ -13,10 +13,15 @@ type Config struct {
 	Port   int    `mapstructure:"port"`
 	Token  string `mapstructure:"token"`
 	Format string `mapstructure:"format"`
+	TLS    bool   `mapstructure:"tls"`
 }
 
 func (c *Config) BaseURL() string {
-	return fmt.Sprintf("http://%s:%d", c.Host, c.Port)
+	scheme := "http"
+	if c.TLS {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, c.Host, c.Port)
 }
 
 // CheckLegacyConfig checks if the old homey-cli config exists and prints migration instructions
@@ -60,6 +65,12 @@ func Load() (*Config, error) {
 	viper.SetEnvPrefix("HOMEY")
 	viper.AutomaticEnv()
 
+	// Explicitly bind env vars (required for keys without defaults)
+	_ = viper.BindEnv("token")
+	_ = viper.BindEnv("host")
+	_ = viper.BindEnv("port")
+	_ = viper.BindEnv("format")
+
 	// Defaults
 	viper.SetDefault("host", "localhost")
 	viper.SetDefault("port", 4859)
@@ -87,7 +98,7 @@ func Save(cfg *Config) error {
 	}
 
 	dir := filepath.Join(configDir, "homeyctl")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
 
@@ -95,6 +106,7 @@ func Save(cfg *Config) error {
 	viper.Set("port", cfg.Port)
 	viper.Set("token", cfg.Token)
 	viper.Set("format", cfg.Format)
+	viper.Set("tls", cfg.TLS)
 
 	configPath := filepath.Join(dir, "config.toml")
 	return viper.WriteConfigAs(configPath)

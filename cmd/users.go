@@ -10,12 +10,12 @@ import (
 )
 
 type User struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	Present  bool   `json:"present"`
-	Asleep   bool   `json:"asleep"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Role    string `json:"role"`
+	Present bool   `json:"present"`
+	Asleep  bool   `json:"asleep"`
 }
 
 var usersCmd = &cobra.Command{

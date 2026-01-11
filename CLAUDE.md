@@ -51,7 +51,31 @@ The client returns `json.RawMessage` for GET requests, allowing commands to pars
 
 ### Configuration
 
-Config is loaded in `PersistentPreRunE` on rootCmd. Commands that don't need API access (config, version, help, ai) skip loading. Environment variables prefixed with `HOMEY_` override config file values.
+Config is loaded in `PersistentPreRunE` on rootCmd. Commands that don't need API access (config, version, help, ai, login, create) skip loading. Environment variables prefixed with `HOMEY_` override config file values.
+
+### Authentication & OAuth
+
+The CLI supports two authentication methods:
+
+1. **OAuth flow (recommended)**: `homeyctl login`
+   - Opens browser for Athom account login
+   - Creates a scoped Personal Access Token (PAT) with "control" preset
+   - Saves token to config automatically
+   - OAuth client credentials are embedded in `internal/oauth/oauth.go`
+
+2. **Manual setup**: Create API key at my.homey.app, then `homeyctl config set-token`
+
+**Creating tokens for AI bots**:
+```bash
+homeyctl token create "AI Bot" --preset readonly --no-save
+```
+
+**Scoped token presets**:
+- `readonly` - Can only read devices, flows, zones, etc. (safe for AI)
+- `control` - Can read + control devices and trigger flows
+- `full` - Full access (same as owner)
+
+PATs cannot create other PATs - OAuth session required for token management.
 
 ## Quick Context
 

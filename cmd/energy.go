@@ -27,7 +27,7 @@ var energyLiveCmd = &cobra.Command{
 
 		if isTableFormat() {
 			var report struct {
-				ZoneName       string `json:"zoneName"`
+				ZoneName       string               `json:"zoneName"`
 				TotalConsumed  struct{ W *float64 } `json:"totalConsumed"`
 				TotalGenerated struct{ W *float64 } `json:"totalGenerated"`
 				Items          []struct {

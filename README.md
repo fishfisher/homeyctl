@@ -25,32 +25,40 @@ Download from [Releases](https://github.com/langtind/homey-cli/releases) and add
 go install github.com/langtind/homey-cli@latest
 ```
 
-## Configuration
+## Getting Started
 
-### 1. Find your Homey's IP address
-
-Open the Homey app → Settings → General → scroll down to find the local IP address (e.g., `192.168.1.100`).
-
-### 2. Get your API token
-
-1. Go to [my.homey.app](https://my.homey.app/)
-2. Log in and select your Homey
-3. Click **Settings** (gear icon, bottom left)
-4. Click **API Keys**
-5. Click **+ New API Key** to create a new token
-6. Copy the generated token
-
-### 3. Configure homeyctl
+The easiest way to get started:
 
 ```bash
-# Set your Homey's IP address
+homeyctl login
+```
+
+This opens your browser to log in with your Athom account, creates an API token, and saves it automatically.
+
+### Creating Tokens for AI Bots
+
+For AI assistants that should only have read access:
+
+```bash
+homeyctl token create "AI Bot" --preset readonly --no-save
+```
+
+Available presets:
+- `readonly` - Read-only access (safe for AI bots)
+- `control` - Read + control devices and trigger flows
+- `full` - Full access
+
+### Manual Configuration (Alternative)
+
+If OAuth doesn't work, you can configure manually:
+
+1. Go to [my.homey.app](https://my.homey.app/) → Settings → API Keys
+2. Create a new API key
+3. Configure homeyctl:
+
+```bash
 homeyctl config set-host 192.168.1.100
-
-# Set your API token (paste the token you copied)
 homeyctl config set-token <your-token>
-
-# Verify configuration
-homeyctl config show
 ```
 
 Configuration is stored in `~/.config/homeyctl/config.toml`.
