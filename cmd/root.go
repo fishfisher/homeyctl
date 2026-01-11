@@ -70,7 +70,7 @@ var rootCmd = &cobra.Command{
 		cmdPath := cmd.CommandPath()
 		if cmd.Name() == "config" || cmd.Name() == "version" || cmd.Name() == "help" ||
 			cmd.Name() == "set-token" || cmd.Name() == "set-host" || cmd.Name() == "show" ||
-			cmd.Name() == "completion" || cmdPath == "homey" {
+			cmd.Name() == "completion" || cmd.Name() == "ai" || cmdPath == "homey" {
 			return nil
 		}
 
