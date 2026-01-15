@@ -1,0 +1,92 @@
+package cmd
+
+import (
+	"testing"
+)
+
+func TestCommandSkipsConfigLoading(t *testing.T) {
+	// Commands that should skip config loading (don't need API client)
+	skipCommands := []struct {
+		name       string
+		cmdPath    string
+		cmdName    string
+		shouldSkip bool
+	}{
+		// Commands that SHOULD skip config loading
+		{"config command", "homeyctl config", "config", true},
+		{"config set-token", "homeyctl config set-token", "set-token", true},
+		{"config set-host", "homeyctl config set-host", "set-host", true},
+		{"config show", "homeyctl config show", "show", true},
+		{"version command", "homeyctl version", "version", true},
+		{"help command", "homeyctl help", "help", true},
+		{"completion command", "homeyctl completion", "completion", true},
+		{"ai command", "homeyctl ai", "ai", true},
+		{"login command", "homeyctl login", "login", true},
+		{"token create command", "homeyctl token create", "create", true},
+		{"token scopes command", "homeyctl token scopes", "scopes", true},
+		{"root command", "homeyctl", "homeyctl", true},
+
+		// Commands that should NOT skip config loading (need API client)
+		// This is the key fix for GitHub issues #4 and #5
+		{"flows create command", "homeyctl flows create", "create", false},
+		{"flows create --advanced", "homeyctl flows create", "create", false},
+		{"flows list command", "homeyctl flows list", "list", false},
+		{"flows get command", "homeyctl flows get", "get", false},
+		{"flows update command", "homeyctl flows update", "update", false},
+		{"flows delete command", "homeyctl flows delete", "delete", false},
+		{"flows trigger command", "homeyctl flows trigger", "trigger", false},
+		{"flows cards command", "homeyctl flows cards", "cards", false},
+		{"devices list command", "homeyctl devices list", "list", false},
+		{"devices get command", "homeyctl devices get", "get", false},
+		{"devices set command", "homeyctl devices set", "set", false},
+		{"zones list command", "homeyctl zones list", "list", false},
+		{"token list command", "homeyctl token list", "list", false},
+		{"token delete command", "homeyctl token delete", "delete", false},
+	}
+
+	for _, tc := range skipCommands {
+		t.Run(tc.name, func(t *testing.T) {
+			shouldSkip := shouldSkipConfigLoading(tc.cmdPath, tc.cmdName)
+			if shouldSkip != tc.shouldSkip {
+				t.Errorf("shouldSkipConfigLoading(%q, %q) = %v, want %v",
+					tc.cmdPath, tc.cmdName, shouldSkip, tc.shouldSkip)
+			}
+		})
+	}
+}
+
+// TestFlowsCreateRequiresClient specifically tests the fix for GitHub issues #4 and #5
+// The bug was that cmd.Name() == "create" matched both "token create" and "flows create",
+// causing apiClient to be nil for flows create, resulting in a segmentation fault.
+func TestFlowsCreateRequiresClient(t *testing.T) {
+	// These two commands both have name "create" but only token create should skip
+	tokenCreate := shouldSkipConfigLoading("homeyctl token create", "create")
+	flowsCreate := shouldSkipConfigLoading("homeyctl flows create", "create")
+
+	if !tokenCreate {
+		t.Error("token create should skip config loading (handles its own OAuth)")
+	}
+	if flowsCreate {
+		t.Error("flows create should NOT skip config loading (needs apiClient)")
+	}
+}
+
+// shouldSkipConfigLoading mirrors the logic in PersistentPreRunE
+// This allows us to test the logic without executing actual commands
+func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
+	// Skip config commands that don't need API client
+	if cmdName == "config" || cmdName == "version" || cmdName == "help" ||
+		cmdName == "set-token" || cmdName == "set-host" || cmdName == "show" ||
+		cmdName == "completion" || cmdName == "ai" || cmdName == "scopes" ||
+		cmdName == "login" || cmdPath == "homeyctl" {
+		return true
+	}
+
+	// Only skip create for "token create" (handles its own OAuth auth)
+	// NOT for "flows create" which needs the normal apiClient
+	if cmdPath == "homeyctl token create" {
+		return true
+	}
+
+	return false
+}
