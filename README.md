@@ -317,10 +317,18 @@ This outputs documentation, examples, and flow JSON format - perfect for pasting
 
 ## Environment Variables
 
-All config options can be set via environment variables:
+All config options can be set via environment variables (prefix `HOMEY_`):
 
 ```bash
+# Connection
+export HOMEY_MODE=auto              # auto, local, or cloud
+export HOMEY_LOCAL_ADDRESS=http://192.168.1.50
+export HOMEY_LOCAL_TOKEN=your-local-token
+
+# Output
+export HOMEY_FORMAT=table           # json or table
+
+# Legacy (still supported)
 export HOMEY_HOST=192.168.1.100
 export HOMEY_TOKEN=your-token
-export HOMEY_FORMAT=table
 ```
