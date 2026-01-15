@@ -88,6 +88,15 @@ func (c *Client) DeleteDevice(id string) error {
 	return err
 }
 
+func (c *Client) GetDeviceSettings(id string) (json.RawMessage, error) {
+	return c.doRequest("GET", fmt.Sprintf("/api/manager/devices/device/%s/settings_obj", id), nil)
+}
+
+func (c *Client) SetDeviceSetting(deviceID string, settings map[string]interface{}) error {
+	_, err := c.doRequest("PUT", fmt.Sprintf("/api/manager/devices/device/%s/settings", deviceID), settings)
+	return err
+}
+
 // Flows
 
 func (c *Client) GetFlows() (json.RawMessage, error) {

@@ -79,8 +79,14 @@ homeyctl login
 homeyctl devices list                  # List all devices
 homeyctl devices get <id>              # Get device details
 homeyctl devices set <id> <capability> <value>  # Control device
+homeyctl devices get-settings <id>     # Get device settings
+homeyctl devices set-setting <id> <key> <value>  # Set device setting
 homeyctl devices delete <name-or-id>   # Delete a device
 ` + "```" + `
+
+**Note on Device Settings**: Settings (like ` + "`zone_activity_disabled`" + `) require full ` + "`homey.device`" + ` scope.
+OAuth tokens only support ` + "`homey.device.control`" + `. For settings access, create an API key
+at https://my.homey.app (Select Homey → Settings → API Keys).
 
 ### Flows
 ` + "```" + `bash
