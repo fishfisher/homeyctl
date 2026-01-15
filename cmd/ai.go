@@ -77,7 +77,11 @@ homeyctl login
 ### Devices
 ` + "```" + `bash
 homeyctl devices list                  # List all devices
+homeyctl devices list --match "kitchen" # Filter by name
 homeyctl devices get <id>              # Get device details
+homeyctl devices values <name-or-id>   # Get all capability values
+homeyctl devices on <name-or-id>       # Turn device on (shorthand)
+homeyctl devices off <name-or-id>      # Turn device off (shorthand)
 homeyctl devices set <id> <capability> <value>  # Control device
 homeyctl devices get-settings <id>     # Get device settings
 homeyctl devices set-setting <id> <key> <value>  # Set device setting
@@ -91,6 +95,7 @@ at https://my.homey.app (Select Homey → Settings → API Keys).
 ### Flows
 ` + "```" + `bash
 homeyctl flows list                    # List all flows
+homeyctl flows list --match "night"    # Filter by name
 homeyctl flows get <name-or-id>        # Get flow details
 homeyctl flows create <file.json>      # Create flow from JSON
 homeyctl flows update <name> <file>    # Update existing flow (merge)
@@ -121,6 +126,12 @@ homeyctl energy price type fixed       # Switch to fixed pricing
 ` + "```" + `bash
 homeyctl insights list                 # List all insight logs
 homeyctl insights get <log-id>         # Get historical data
+` + "```" + `
+
+### Snapshot
+` + "```" + `bash
+homeyctl snapshot                      # Get system, zones, devices overview
+homeyctl snapshot --include-flows      # Also include flows
 ` + "```" + `
 
 ## Flow JSON Format
