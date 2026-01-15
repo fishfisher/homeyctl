@@ -72,6 +72,26 @@ For users who want full access:
 homeyctl login
 ` + "```" + `
 
+## Connection Modes
+
+homeyctl supports local (LAN/VPN) and cloud connections:
+
+` + "```" + `bash
+# Set connection mode
+homeyctl config set-mode auto   # Prefer local, fallback to cloud (default)
+homeyctl config set-mode local  # Always use local
+homeyctl config set-mode cloud  # Always use cloud
+
+# Configure local connection
+homeyctl config set-local http://192.168.1.50 "local-api-key"
+
+# Configure cloud connection
+homeyctl config set-cloud "cloud-token"
+
+# View current config
+homeyctl config show
+` + "```" + `
+
 ## Available Commands
 
 ### Devices
