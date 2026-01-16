@@ -121,22 +121,22 @@ func TestZonesRenameCommand_HasIconFlag(t *testing.T) {
 }
 
 func TestKnownZoneIcons_NotEmpty(t *testing.T) {
-	if len(knownZoneIcons) == 0 {
-		t.Error("expected knownZoneIcons to not be empty")
+	if len(KnownZoneIcons) == 0 {
+		t.Error("expected KnownZoneIcons to not be empty")
 	}
 
 	// Check that common icons are present
 	expectedIcons := []string{"home", "livingRoom", "kitchen", "bedroom", "office"}
 	for _, expected := range expectedIcons {
 		found := false
-		for _, icon := range knownZoneIcons {
+		for _, icon := range KnownZoneIcons {
 			if icon == expected {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("expected icon '%s' to be in knownZoneIcons", expected)
+			t.Errorf("expected icon '%s' to be in KnownZoneIcons", expected)
 		}
 	}
 }
