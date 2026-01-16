@@ -112,6 +112,52 @@ var zonesListCmd = &cobra.Command{
 	},
 }
 
+var zonesGetCmd = &cobra.Command{
+	Use:   "get <zone>",
+	Short: "Get zone details",
+	Long: `Get detailed information about a specific zone.
+
+Examples:
+  homeyctl zones get "Living Room"
+  homeyctl zones get abc123-zone-id`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		zone, err := findZone(args[0])
+		if err != nil {
+			return err
+		}
+
+		// Get full zone data from API
+		data, err := apiClient.GetZone(zone.ID)
+		if err != nil {
+			return err
+		}
+
+		if isTableFormat() {
+			var z struct {
+				ID     string `json:"id"`
+				Name   string `json:"name"`
+				Icon   string `json:"icon"`
+				Parent string `json:"parent"`
+				Active bool   `json:"active"`
+			}
+			if err := json.Unmarshal(data, &z); err != nil {
+				return fmt.Errorf("failed to parse zone: %w", err)
+			}
+
+			fmt.Printf("Name:   %s\n", z.Name)
+			fmt.Printf("Icon:   %s\n", z.Icon)
+			fmt.Printf("ID:     %s\n", z.ID)
+			fmt.Printf("Parent: %s\n", z.Parent)
+			fmt.Printf("Active: %v\n", z.Active)
+			return nil
+		}
+
+		outputJSON(data)
+		return nil
+	},
+}
+
 var zonesIconsCmd = &cobra.Command{
 	Use:   "icons",
 	Short: "List available zone icons",
@@ -140,5 +186,6 @@ Note: This list may not be exhaustive. Homey may support additional icons.`,
 func init() {
 	rootCmd.AddCommand(zonesCmd)
 	zonesCmd.AddCommand(zonesListCmd)
+	zonesCmd.AddCommand(zonesGetCmd)
 	zonesCmd.AddCommand(zonesIconsCmd)
 }

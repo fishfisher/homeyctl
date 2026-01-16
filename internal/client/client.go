@@ -102,6 +102,22 @@ func (c *Client) SetDeviceSetting(deviceID string, settings map[string]interface
 	return err
 }
 
+// Device Groups
+
+func (c *Client) CreateDeviceGroup(group map[string]interface{}) (json.RawMessage, error) {
+	return c.doRequest("POST", "/api/manager/devices/group", group)
+}
+
+func (c *Client) UpdateDeviceGroup(id string, updates map[string]interface{}) error {
+	_, err := c.doRequest("PUT", "/api/manager/devices/group/"+id, updates)
+	return err
+}
+
+func (c *Client) RemoveDeviceFromGroup(groupID, deviceID string) error {
+	_, err := c.doRequest("DELETE", fmt.Sprintf("/api/manager/devices/group/%s/device/%s", groupID, deviceID), nil)
+	return err
+}
+
 // Flows
 
 func (c *Client) GetFlows() (json.RawMessage, error) {
@@ -166,6 +182,14 @@ func (c *Client) GetFlowActions() (json.RawMessage, error) {
 
 func (c *Client) GetZones() (json.RawMessage, error) {
 	return c.doRequest("GET", "/api/manager/zones/zone/", nil)
+}
+
+func (c *Client) GetZone(id string) (json.RawMessage, error) {
+	return c.doRequest("GET", "/api/manager/zones/zone/"+id, nil)
+}
+
+func (c *Client) CreateZone(zone map[string]interface{}) (json.RawMessage, error) {
+	return c.doRequest("POST", "/api/manager/zones/zone/", zone)
 }
 
 func (c *Client) DeleteZone(id string) error {
