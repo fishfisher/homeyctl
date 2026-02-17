@@ -9,7 +9,7 @@ var (
 )
 
 func main() {
-	cmd.SetSkillFS(skillFS, "homeyctl-skill", "homeyctl")
+	cmd.SetSkillFS(skillFS, "homey-skill", "homey")
 	cmd.SetVersionInfo(version, commit, date)
 	cmd.Execute()
 }

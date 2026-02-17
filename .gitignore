@@ -4,6 +4,9 @@ homey-cli
 homeyctl
 *.exe
 
+# GoReleaser
+dist/
+
 # Go
 vendor/
 go.work

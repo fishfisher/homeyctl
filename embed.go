@@ -2,5 +2,5 @@ package main
 
 import "embed"
 
-//go:embed homeyctl-skill/*
+//go:embed homey-skill/*
 var skillFS embed.FS
