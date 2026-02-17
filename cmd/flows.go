@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/rodaine/table"
@@ -389,6 +391,53 @@ func validateFlow(flow map[string]interface{}, advanced bool) error {
 	return nil
 }
 
+// validateAdvancedFlowUpdate checks that cards in an advanced flow update
+// have the required fields to avoid breaking the flow canvas.
+// Homey merges at the card-ID level, so sending a card with only "args"
+// will wipe id, type, ownerUri, x, y — leaving a broken flow.
+func validateAdvancedFlowUpdate(flow map[string]interface{}) error {
+	cards, ok := flow["cards"].(map[string]interface{})
+	if !ok {
+		return nil // no cards in update, safe
+	}
+
+	for cardID, cardRaw := range cards {
+		card, ok := cardRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		cardType, _ := card["type"].(string)
+
+		// Start cards only need "type"
+		if cardType == "start" {
+			continue
+		}
+
+		// Action/condition/trigger cards need these fields
+		var missing []string
+		if _, ok := card["id"]; !ok {
+			missing = append(missing, "id")
+		}
+		if cardType == "" {
+			missing = append(missing, "type")
+		}
+		if _, ok := card["ownerUri"]; !ok {
+			missing = append(missing, "ownerUri")
+		}
+
+		if len(missing) > 0 {
+			return fmt.Errorf("validation error: card %q is missing required fields: %s\n"+
+				"Homey replaces entire cards during merge updates. Include all fields (id, type, ownerUri, x, y)\n"+
+				"or use --backup to save the current flow first, then provide the complete card object.\n"+
+				"Tip: run 'homeyctl flows get <flow>' to see the full card structure",
+				cardID, strings.Join(missing, ", "))
+		}
+	}
+
+	return nil
+}
+
 // normalizeSimpleFlow adds required fields that Homey expects
 func normalizeSimpleFlow(flow map[string]interface{}) {
 	// Add group to conditions
@@ -417,6 +466,38 @@ func normalizeSimpleFlow(flow map[string]interface{}) {
 	}
 }
 
+// backupFlow saves the current flow state to a JSON file and returns the path.
+func backupFlow(name string, rawData json.RawMessage) (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to find config dir: %w", err)
+	}
+
+	backupDir := filepath.Join(configDir, "homeyctl", "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create backup dir: %w", err)
+	}
+
+	// Sanitize name for filename
+	safeName := strings.NewReplacer(" ", "_", "/", "_").Replace(name)
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("%s_%s.json", safeName, timestamp)
+	path := filepath.Join(backupDir, filename)
+
+	// Pretty-print the JSON
+	var pretty json.RawMessage
+	if err := json.Unmarshal(rawData, &pretty); err != nil {
+		return "", err
+	}
+	formatted, _ := json.MarshalIndent(pretty, "", "  ")
+
+	if err := os.WriteFile(path, formatted, 0o644); err != nil {
+		return "", fmt.Errorf("failed to write backup: %w", err)
+	}
+
+	return path, nil
+}
+
 var flowsUpdateCmd = &cobra.Command{
 	Use:   "update <name-or-id> <json-file>",
 	Short: "Update an existing flow",
@@ -426,11 +507,17 @@ IMPORTANT: This does a partial/merge update - only fields you include will be
 changed. Fields you omit keep their existing values. To remove conditions or
 actions, explicitly set them to an empty array: "conditions": []
 
+Use --backup to save the current flow state before applying changes.
+Backups are stored in ~/Library/Application Support/homeyctl/backups/.
+
 Examples:
   # Full update workflow
   homeyctl flows get "My Flow" > flow.json
   # Edit flow.json
   homeyctl flows update "My Flow" flow.json
+
+  # Update with backup (recommended)
+  homeyctl flows update --backup "My Flow" flow.json
 
   # Partial update - just rename
   echo '{"name": "New Name"}' | homeyctl flows update "Old Name" /dev/stdin
@@ -440,6 +527,7 @@ Examples:
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nameOrID := args[0]
+		backup, _ := cmd.Flags().GetBool("backup")
 
 		data, err := os.ReadFile(args[1])
 		if err != nil {
@@ -455,18 +543,28 @@ Examples:
 		normalData, _ := apiClient.GetFlows()
 		advancedData, _ := apiClient.GetAdvancedFlows()
 
-		var normalFlows map[string]Flow
-		var advancedFlows map[string]AdvancedFlow
+		var normalFlows map[string]json.RawMessage
+		var advancedFlows map[string]json.RawMessage
 		json.Unmarshal(normalData, &normalFlows)
 		json.Unmarshal(advancedData, &advancedFlows)
 
 		// Try normal flows first
-		for _, f := range normalFlows {
+		for _, raw := range normalFlows {
+			var f Flow
+			json.Unmarshal(raw, &f)
 			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
 				if err := validateFlow(flow, false); err != nil {
 					return err
 				}
 				normalizeSimpleFlow(flow)
+
+				if backup {
+					path, err := backupFlow(f.Name, raw)
+					if err != nil {
+						return fmt.Errorf("backup failed: %w", err)
+					}
+					color.Yellow("Backed up to: %s\n", path)
+				}
 
 				_, err := apiClient.UpdateFlow(f.ID, flow)
 				if err != nil {
@@ -478,8 +576,22 @@ Examples:
 		}
 
 		// Try advanced flows
-		for _, f := range advancedFlows {
+		for _, raw := range advancedFlows {
+			var f AdvancedFlow
+			json.Unmarshal(raw, &f)
 			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
+				if err := validateAdvancedFlowUpdate(flow); err != nil {
+					return err
+				}
+
+				if backup {
+					path, err := backupFlow(f.Name, raw)
+					if err != nil {
+						return fmt.Errorf("backup failed: %w", err)
+					}
+					color.Yellow("Backed up to: %s\n", path)
+				}
+
 				_, err := apiClient.UpdateAdvancedFlow(f.ID, flow)
 				if err != nil {
 					return err
@@ -698,6 +810,7 @@ func init() {
 	flowsCmd.AddCommand(flowsCardsCmd)
 	flowsCmd.AddCommand(flowsAutocompleteCmd)
 
+	flowsUpdateCmd.Flags().Bool("backup", false, "Save current flow state before updating")
 	flowsCreateCmd.Flags().Bool("advanced", false, "Create an advanced flow")
 	flowsCardsCmd.Flags().String("type", "action", "Card type: trigger, condition, action")
 	flowsCardsCmd.Flags().String("filter", "", "Filter cards by name or ID")
