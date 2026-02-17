@@ -245,6 +245,91 @@ var homeyscriptRunCmd = &cobra.Command{
 	},
 }
 
+var homeyscriptCreateFlowCmd = &cobra.Command{
+	Use:   "create-flow <script-name-or-id>",
+	Short: "Create a simple flow that runs a HomeyScript",
+	Long: `Create a triggerable simple flow that runs a HomeyScript.
+
+Uses the "This flow is started" trigger so the flow can be triggered
+via the API, dashboard, or other flows. Use --arg to pass an argument
+string to the script at runtime.
+
+Examples:
+  # Create flow that runs a script (no argument)
+  homeyctl hs create-flow my_script --name "Run My Script"
+
+  # Create flow with an argument
+  homeyctl hs create-flow sonos_enqueue_play --name "Play Calm" --arg "192.168.68.129|playlist-uri|Calm|playlist"
+
+  # Create disabled flow
+  homeyctl hs create-flow my_script --name "Test Flow" --enabled=false`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		script, err := findHomeyScript(args[0])
+		if err != nil {
+			return err
+		}
+
+		flowName, _ := cmd.Flags().GetString("name")
+		if flowName == "" {
+			return fmt.Errorf("--name is required")
+		}
+		argValue, _ := cmd.Flags().GetString("arg")
+		enabled, _ := cmd.Flags().GetBool("enabled")
+
+		// Determine which flow card to use
+		var cardID string
+		scriptArgs := map[string]interface{}{
+			"script": map[string]interface{}{
+				"id":   script.ID,
+				"name": script.Name,
+			},
+		}
+
+		if argValue != "" {
+			cardID = "homey:app:com.athom.homeyscript:runWithArg"
+			scriptArgs["argument"] = argValue
+		} else {
+			cardID = "homey:app:com.athom.homeyscript:run"
+		}
+
+		flow := map[string]interface{}{
+			"name":    flowName,
+			"enabled": enabled,
+			"trigger": map[string]interface{}{
+				"id": "homey:manager:flow:programmatic_trigger",
+			},
+			"actions": []interface{}{
+				map[string]interface{}{
+					"id":   cardID,
+					"args": scriptArgs,
+				},
+			},
+		}
+
+		// normalizeSimpleFlow adds group fields
+		normalizeSimpleFlow(flow)
+
+		result, err := apiClient.CreateFlow(flow)
+		if err != nil {
+			return err
+		}
+
+		if isJSON() {
+			outputJSON(result)
+			return nil
+		}
+
+		var created struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		}
+		json.Unmarshal(result, &created)
+		color.Green("Created flow: %s (ID: %s)\n", created.Name, created.ID)
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(homeyscriptCmd)
 	homeyscriptCmd.AddCommand(homeyscriptListCmd)
@@ -253,6 +338,7 @@ func init() {
 	homeyscriptCmd.AddCommand(homeyscriptUpdateCmd)
 	homeyscriptCmd.AddCommand(homeyscriptDeleteCmd)
 	homeyscriptCmd.AddCommand(homeyscriptRunCmd)
+	homeyscriptCmd.AddCommand(homeyscriptCreateFlowCmd)
 
 	homeyscriptCreateCmd.Flags().String("file", "", "Path to .js file containing script code")
 	homeyscriptCreateCmd.Flags().String("code", "", "Inline script code")
@@ -260,4 +346,8 @@ func init() {
 	homeyscriptUpdateCmd.Flags().String("file", "", "Path to .js file containing new script code")
 	homeyscriptUpdateCmd.Flags().String("code", "", "Inline script code")
 	homeyscriptUpdateCmd.Flags().String("name", "", "New name for the script")
+
+	homeyscriptCreateFlowCmd.Flags().String("name", "", "Name for the flow (required)")
+	homeyscriptCreateFlowCmd.Flags().String("arg", "", "Argument string to pass to the script")
+	homeyscriptCreateFlowCmd.Flags().Bool("enabled", true, "Whether the flow starts enabled")
 }

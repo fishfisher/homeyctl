@@ -136,7 +136,7 @@ Manage Homey flows (automations):
 ```bash
 # List all flows
 homeyctl flows list
-homeyctl flows list --filter "morning"  # Filter by name pattern
+homeyctl flows list --match "morning"  # Filter by name pattern
 
 # Get flow details (use to see structure)
 homeyctl flows get "My Flow"
@@ -144,8 +144,10 @@ homeyctl flows get "My Flow"
 # Trigger a flow by name
 homeyctl flows trigger "Good Morning"
 
-# Update existing flow (merge)
+# Update existing flow (merge) — file, inline JSON, or stdin
 homeyctl flows update "My Flow" updated-flow.json
+homeyctl flows update "My Flow" --data '{"name": "New Name"}'
+echo '{"name": "New"}' | homeyctl flows update "My Flow" -
 
 # Delete a flow
 homeyctl flows delete "Old Flow"
@@ -222,13 +224,18 @@ WRONG:   "homey:device:abc123:measure_temperature"
 - To remove conditions/actions, explicitly set empty array: `"conditions": []`
 
 ```bash
-# Rename a flow
+# Rename a flow (inline JSON — no temp file needed)
+homeyctl flows update "Old Name" --data '{"name": "New Name"}'
+
+# Rename via stdin
+echo '{"name": "New Name"}' | homeyctl flows update "Old Name" -
+
+# Rename via file
 echo '{"name": "New Name"}' > rename.json
 homeyctl flows update "Old Name" rename.json
 
 # Remove all conditions from a flow
-echo '{"conditions": []}' > clear.json
-homeyctl flows update "My Flow" clear.json
+homeyctl flows update "My Flow" --data '{"conditions": []}'
 ```
 
 ### 3. Energy Monitoring
@@ -439,6 +446,40 @@ homeyctl snapshot --include-flows
 # JSON output for scripting
 homeyctl snapshot --json
 ```
+
+### 14. HomeyScript
+
+Manage and run HomeyScript scripts, and create flows that run them:
+
+```bash
+# List all scripts
+homeyctl hs list
+
+# Get script details (includes source code)
+homeyctl hs get "my_script"
+
+# Create a script
+homeyctl hs create "my_script" --file script.js
+homeyctl hs create "my_script" --code 'console.log("Hello")'
+
+# Update a script
+homeyctl hs update "my_script" --file updated.js
+homeyctl hs update "my_script" --name "new_name"
+
+# Run a script (with optional arguments)
+homeyctl hs run "my_script"
+homeyctl hs run "my_script" arg1 arg2
+
+# Delete a script
+homeyctl hs delete "my_script"
+
+# Create a triggerable flow that runs a HomeyScript
+homeyctl hs create-flow "my_script" --name "Run My Script"
+homeyctl hs create-flow "my_script" --name "Run With Arg" --arg "some|argument"
+```
+
+The `create-flow` command builds a simple flow with the "This flow is started" trigger
+wired to a HomeyScript action card. Trigger it with `homeyctl flows trigger "Run My Script"`.
 
 ## Output Formats
 

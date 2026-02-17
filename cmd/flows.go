@@ -37,6 +37,57 @@ var flowsCmd = &cobra.Command{
 
 var flowsMatchFilter string
 
+// foundFlow holds a resolved flow with its raw JSON and metadata.
+type foundFlow struct {
+	ID       string
+	Name     string
+	Advanced bool
+	Raw      json.RawMessage
+}
+
+// findFlow looks up a flow by name or ID across both simple and advanced flows.
+func findFlow(nameOrID string) (*foundFlow, error) {
+	normalData, err := apiClient.GetFlows()
+	if err != nil {
+		return nil, err
+	}
+	advancedData, err := apiClient.GetAdvancedFlows()
+	if err != nil {
+		return nil, err
+	}
+
+	var normalFlows map[string]json.RawMessage
+	if err := json.Unmarshal(normalData, &normalFlows); err != nil {
+		return nil, fmt.Errorf("failed to parse flows: %w", err)
+	}
+	var advancedFlows map[string]json.RawMessage
+	if err := json.Unmarshal(advancedData, &advancedFlows); err != nil {
+		return nil, fmt.Errorf("failed to parse advanced flows: %w", err)
+	}
+
+	for _, raw := range normalFlows {
+		var f Flow
+		if err := json.Unmarshal(raw, &f); err != nil {
+			continue
+		}
+		if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
+			return &foundFlow{ID: f.ID, Name: f.Name, Advanced: false, Raw: raw}, nil
+		}
+	}
+
+	for _, raw := range advancedFlows {
+		var f AdvancedFlow
+		if err := json.Unmarshal(raw, &f); err != nil {
+			continue
+		}
+		if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
+			return &foundFlow{ID: f.ID, Name: f.Name, Advanced: true, Raw: raw}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("flow not found: %s", nameOrID)
+}
+
 // FlowListItem is the unified output format for flows
 type FlowListItem struct {
 	ID          string `json:"id"`
@@ -128,40 +179,23 @@ var flowsTriggerCmd = &cobra.Command{
 	Short: "Trigger a flow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		nameOrID := args[0]
-
-		// Get all flows to find by name
-		normalData, _ := apiClient.GetFlows()
-		advancedData, _ := apiClient.GetAdvancedFlows()
-
-		var normalFlows map[string]Flow
-		var advancedFlows map[string]AdvancedFlow
-		json.Unmarshal(normalData, &normalFlows)
-		json.Unmarshal(advancedData, &advancedFlows)
-
-		// Try normal flows first
-		for _, f := range normalFlows {
-			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				if err := apiClient.TriggerFlow(f.ID); err != nil {
-					return err
-				}
-				color.Green("Triggered flow: %s\n", f.Name)
-				return nil
-			}
+		f, err := findFlow(args[0])
+		if err != nil {
+			return err
 		}
 
-		// Try advanced flows
-		for _, f := range advancedFlows {
-			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				if err := apiClient.TriggerAdvancedFlow(f.ID); err != nil {
-					return err
-				}
-				color.Green("Triggered advanced flow: %s\n", f.Name)
-				return nil
+		if f.Advanced {
+			if err := apiClient.TriggerAdvancedFlow(f.ID); err != nil {
+				return err
 			}
+			color.Green("Triggered advanced flow: %s\n", f.Name)
+		} else {
+			if err := apiClient.TriggerFlow(f.ID); err != nil {
+				return err
+			}
+			color.Green("Triggered flow: %s\n", f.Name)
 		}
-
-		return fmt.Errorf("flow not found: %s", nameOrID)
+		return nil
 	},
 }
 
@@ -170,37 +204,12 @@ var flowsGetCmd = &cobra.Command{
 	Short: "Get flow details",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		nameOrID := args[0]
-
-		normalData, _ := apiClient.GetFlows()
-		advancedData, _ := apiClient.GetAdvancedFlows()
-
-		var normalFlows map[string]json.RawMessage
-		var advancedFlows map[string]json.RawMessage
-		json.Unmarshal(normalData, &normalFlows)
-		json.Unmarshal(advancedData, &advancedFlows)
-
-		// Try normal flows first
-		for id, raw := range normalFlows {
-			var f Flow
-			json.Unmarshal(raw, &f)
-			if id == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				outputJSON(raw)
-				return nil
-			}
+		f, err := findFlow(args[0])
+		if err != nil {
+			return err
 		}
-
-		// Try advanced flows
-		for id, raw := range advancedFlows {
-			var f AdvancedFlow
-			json.Unmarshal(raw, &f)
-			if id == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				outputJSON(raw)
-				return nil
-			}
-		}
-
-		return fmt.Errorf("flow not found: %s", nameOrID)
+		outputJSON(f.Raw)
+		return nil
 	},
 }
 
@@ -311,7 +320,9 @@ Examples:
 			ID   string `json:"id"`
 			Name string `json:"name"`
 		}
-		json.Unmarshal(result, &created)
+		if err := json.Unmarshal(result, &created); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
 
 		flowType := "flow"
 		if advanced {
@@ -499,9 +510,9 @@ func backupFlow(name string, rawData json.RawMessage) (string, error) {
 }
 
 var flowsUpdateCmd = &cobra.Command{
-	Use:   "update <name-or-id> <json-file>",
+	Use:   "update <name-or-id> [json-file]",
 	Short: "Update an existing flow",
-	Long: `Update an existing flow from a JSON file.
+	Long: `Update an existing flow from a JSON file, inline JSON, or stdin.
 
 IMPORTANT: This does a partial/merge update - only fields you include will be
 changed. Fields you omit keep their existing values. To remove conditions or
@@ -519,19 +530,38 @@ Examples:
   # Update with backup (recommended)
   homeyctl flows update --backup "My Flow" flow.json
 
-  # Partial update - just rename
-  echo '{"name": "New Name"}' | homeyctl flows update "Old Name" /dev/stdin
+  # Inline JSON via --data
+  homeyctl flows update "My Flow" --data '{"name": "New Name"}'
+
+  # Pipe from stdin
+  echo '{"name": "New Name"}' | homeyctl flows update "My Flow" -
 
   # Remove all conditions
-  echo '{"conditions": []}' | homeyctl flows update "My Flow" /dev/stdin`,
-	Args: cobra.ExactArgs(2),
+  echo '{"conditions": []}' | homeyctl flows update "My Flow" -`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nameOrID := args[0]
 		backup, _ := cmd.Flags().GetBool("backup")
+		dataFlag, _ := cmd.Flags().GetString("data")
 
-		data, err := os.ReadFile(args[1])
-		if err != nil {
-			return fmt.Errorf("failed to read file: %w", err)
+		var data []byte
+		var err error
+
+		switch {
+		case dataFlag != "":
+			data = []byte(dataFlag)
+		case len(args) == 2 && args[1] == "-":
+			data, err = os.ReadFile("/dev/stdin")
+			if err != nil {
+				return fmt.Errorf("failed to read stdin: %w", err)
+			}
+		case len(args) == 2:
+			data, err = os.ReadFile(args[1])
+			if err != nil {
+				return fmt.Errorf("failed to read file: %w", err)
+			}
+		default:
+			return fmt.Errorf("provide update JSON via --data, a file path, or - for stdin")
 		}
 
 		var flow map[string]interface{}
@@ -539,69 +569,38 @@ Examples:
 			return fmt.Errorf("invalid JSON: %w", err)
 		}
 
-		// Find the flow to get its ID and type
-		normalData, _ := apiClient.GetFlows()
-		advancedData, _ := apiClient.GetAdvancedFlows()
-
-		var normalFlows map[string]json.RawMessage
-		var advancedFlows map[string]json.RawMessage
-		json.Unmarshal(normalData, &normalFlows)
-		json.Unmarshal(advancedData, &advancedFlows)
-
-		// Try normal flows first
-		for _, raw := range normalFlows {
-			var f Flow
-			json.Unmarshal(raw, &f)
-			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				if err := validateFlow(flow, false); err != nil {
-					return err
-				}
-				normalizeSimpleFlow(flow)
-
-				if backup {
-					path, err := backupFlow(f.Name, raw)
-					if err != nil {
-						return fmt.Errorf("backup failed: %w", err)
-					}
-					color.Yellow("Backed up to: %s\n", path)
-				}
-
-				_, err := apiClient.UpdateFlow(f.ID, flow)
-				if err != nil {
-					return err
-				}
-				color.Green("Updated flow: %s\n", f.Name)
-				return nil
-			}
+		f, err := findFlow(nameOrID)
+		if err != nil {
+			return err
 		}
 
-		// Try advanced flows
-		for _, raw := range advancedFlows {
-			var f AdvancedFlow
-			json.Unmarshal(raw, &f)
-			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				if err := validateAdvancedFlowUpdate(flow); err != nil {
-					return err
-				}
-
-				if backup {
-					path, err := backupFlow(f.Name, raw)
-					if err != nil {
-						return fmt.Errorf("backup failed: %w", err)
-					}
-					color.Yellow("Backed up to: %s\n", path)
-				}
-
-				_, err := apiClient.UpdateAdvancedFlow(f.ID, flow)
-				if err != nil {
-					return err
-				}
-				color.Green("Updated advanced flow: %s\n", f.Name)
-				return nil
+		if backup {
+			path, err := backupFlow(f.Name, f.Raw)
+			if err != nil {
+				return fmt.Errorf("backup failed: %w", err)
 			}
+			color.Yellow("Backed up to: %s\n", path)
 		}
 
-		return fmt.Errorf("flow not found: %s", nameOrID)
+		if f.Advanced {
+			if err := validateAdvancedFlowUpdate(flow); err != nil {
+				return err
+			}
+			if _, err := apiClient.UpdateAdvancedFlow(f.ID, flow); err != nil {
+				return err
+			}
+			color.Green("Updated advanced flow: %s\n", f.Name)
+		} else {
+			if err := validateFlow(flow, false); err != nil {
+				return err
+			}
+			normalizeSimpleFlow(flow)
+			if _, err := apiClient.UpdateFlow(f.ID, flow); err != nil {
+				return err
+			}
+			color.Green("Updated flow: %s\n", f.Name)
+		}
+		return nil
 	},
 }
 
@@ -610,40 +609,23 @@ var flowsDeleteCmd = &cobra.Command{
 	Short: "Delete a flow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		nameOrID := args[0]
-
-		// Get all flows to find by name
-		normalData, _ := apiClient.GetFlows()
-		advancedData, _ := apiClient.GetAdvancedFlows()
-
-		var normalFlows map[string]Flow
-		var advancedFlows map[string]AdvancedFlow
-		json.Unmarshal(normalData, &normalFlows)
-		json.Unmarshal(advancedData, &advancedFlows)
-
-		// Try normal flows first
-		for _, f := range normalFlows {
-			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				if err := apiClient.DeleteFlow(f.ID); err != nil {
-					return err
-				}
-				color.Green("Deleted flow: %s\n", f.Name)
-				return nil
-			}
+		f, err := findFlow(args[0])
+		if err != nil {
+			return err
 		}
 
-		// Try advanced flows
-		for _, f := range advancedFlows {
-			if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-				if err := apiClient.DeleteAdvancedFlow(f.ID); err != nil {
-					return err
-				}
-				color.Green("Deleted advanced flow: %s\n", f.Name)
-				return nil
+		if f.Advanced {
+			if err := apiClient.DeleteAdvancedFlow(f.ID); err != nil {
+				return err
 			}
+			color.Green("Deleted advanced flow: %s\n", f.Name)
+		} else {
+			if err := apiClient.DeleteFlow(f.ID); err != nil {
+				return err
+			}
+			color.Green("Deleted flow: %s\n", f.Name)
 		}
-
-		return fmt.Errorf("flow not found: %s", nameOrID)
+		return nil
 	},
 }
 
@@ -811,6 +793,7 @@ func init() {
 	flowsCmd.AddCommand(flowsAutocompleteCmd)
 
 	flowsUpdateCmd.Flags().Bool("backup", false, "Save current flow state before updating")
+	flowsUpdateCmd.Flags().String("data", "", "Inline JSON data for the update")
 	flowsCreateCmd.Flags().Bool("advanced", false, "Create an advanced flow")
 	flowsCardsCmd.Flags().String("type", "action", "Card type: trigger, condition, action")
 	flowsCardsCmd.Flags().String("filter", "", "Filter cards by name or ID")
