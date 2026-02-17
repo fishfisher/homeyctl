@@ -659,3 +659,43 @@ func (c *Client) DeleteEnergyReports() error {
 func (c *Client) GetEnergyCurrency() (json.RawMessage, error) {
 	return c.doRequest("GET", "/api/manager/energy/currency", nil)
 }
+
+// HomeyScript (app API: com.athom.homeyscript)
+
+func (c *Client) GetHomeyScripts() (json.RawMessage, error) {
+	return c.doRequest("GET", "/api/app/com.athom.homeyscript/script", nil)
+}
+
+func (c *Client) GetHomeyScript(id string) (json.RawMessage, error) {
+	return c.doRequest("GET", "/api/app/com.athom.homeyscript/script/"+id, nil)
+}
+
+func (c *Client) CreateHomeyScript(name, code string) (json.RawMessage, error) {
+	body := map[string]interface{}{
+		"name": name,
+		"code": code,
+	}
+	return c.doRequest("POST", "/api/app/com.athom.homeyscript/script", body)
+}
+
+func (c *Client) UpdateHomeyScript(id, name, code string, version int) (json.RawMessage, error) {
+	body := map[string]interface{}{
+		"name":    name,
+		"code":    code,
+		"version": version,
+	}
+	return c.doRequest("PUT", "/api/app/com.athom.homeyscript/script/"+id, body)
+}
+
+func (c *Client) DeleteHomeyScript(id string) error {
+	_, err := c.doRequest("DELETE", "/api/app/com.athom.homeyscript/script/"+id, nil)
+	return err
+}
+
+func (c *Client) RunHomeyScript(id string, args []string) (json.RawMessage, error) {
+	body := map[string]interface{}{}
+	if len(args) > 0 {
+		body["args"] = args
+	}
+	return c.doRequest("POST", "/api/app/com.athom.homeyscript/script/"+id+"/run", body)
+}
