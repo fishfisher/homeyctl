@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/langtind/homeyctl/internal/config"
+	"github.com/fishfisher/homeyctl/internal/config"
 )
 
 type Client struct {

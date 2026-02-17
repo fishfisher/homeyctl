@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/langtind/homeyctl/internal/config"
+	"github.com/fishfisher/homeyctl/internal/config"
 )
 
 func TestMaskToken_Empty(t *testing.T) {

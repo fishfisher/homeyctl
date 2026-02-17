@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/langtind/homeyctl/internal/config"
-	"github.com/langtind/homeyctl/internal/discovery"
+	"github.com/fishfisher/homeyctl/internal/config"
+	"github.com/fishfisher/homeyctl/internal/discovery"
 	"github.com/spf13/cobra"
 )
 

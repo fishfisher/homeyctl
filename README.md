@@ -11,17 +11,17 @@ A command-line interface for controlling [Homey](https://homey.app) smart home d
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install langtind/tap/homeyctl
+brew install fishfisher/tap/homeyctl
 ```
 
 ### Download Binary
 
-Download from [Releases](https://github.com/langtind/homeyctl/releases) and add to your PATH.
+Download from [Releases](https://github.com/fishfisher/homeyctl/releases) and add to your PATH.
 
 ### Build from Source
 
 ```bash
-go install github.com/langtind/homeyctl@latest
+go install github.com/fishfisher/homeyctl@latest
 ```
 
 ## Quick Start

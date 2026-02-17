@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/langtind/homeyctl/internal/client"
-	"github.com/langtind/homeyctl/internal/config"
+	"github.com/fishfisher/homeyctl/internal/client"
+	"github.com/fishfisher/homeyctl/internal/config"
 )
 
 var (
@@ -69,7 +69,8 @@ var rootCmd = &cobra.Command{
 		if cmd.Name() == "config" || cmd.Name() == "version" || cmd.Name() == "help" ||
 			cmd.Name() == "set-token" || cmd.Name() == "set-host" || cmd.Name() == "show" ||
 			cmd.Name() == "completion" || cmd.Name() == "ai" || cmd.Name() == "scopes" ||
-			cmd.Name() == "login" || cmdPath == "homeyctl token create" || cmdPath == "homeyctl" {
+			cmd.Name() == "login" || cmd.Name() == "install-skill" ||
+			cmdPath == "homeyctl token create" || cmdPath == "homeyctl" {
 			return nil
 		}
 

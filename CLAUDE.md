@@ -104,4 +104,4 @@ Run `homeyctl ai` to get full documentation for AI assistants - includes flow fo
 git tag v0.x.x && git push origin v0.x.x
 ```
 
-GoReleaser builds for darwin/linux/windows (amd64+arm64) and updates `langtind/homebrew-tap`.
+GoReleaser builds for darwin (amd64+arm64) and updates `fishfisher/homebrew-tap`.

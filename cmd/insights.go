@@ -89,11 +89,10 @@ Examples:
 			return fmt.Errorf("failed to parse insights: %w", err)
 		}
 
-		var ownerURI, ownerID string
+		var ownerURI string
 		for _, log := range logs {
 			if log.ID == logID {
 				ownerURI = log.OwnerURI
-				ownerID = log.OwnerID
 				break
 			}
 		}
@@ -102,7 +101,7 @@ Examples:
 			return fmt.Errorf("log not found: %s\nUse 'homeyctl insights list' to see available logs", logID)
 		}
 
-		entries, err := apiClient.GetInsightEntries(ownerURI, ownerID, resolution)
+		entries, err := apiClient.GetInsightEntries(ownerURI, logID, resolution)
 		if err != nil {
 			return err
 		}
@@ -153,11 +152,10 @@ Examples:
 			return fmt.Errorf("failed to parse insights: %w", err)
 		}
 
-		var ownerURI, ownerID, title string
+		var ownerURI, title string
 		for _, log := range logs {
 			if log.ID == logID {
 				ownerURI = log.OwnerURI
-				ownerID = log.OwnerID
 				title = log.Title
 				break
 			}
@@ -167,7 +165,7 @@ Examples:
 			return fmt.Errorf("log not found: %s", logID)
 		}
 
-		if err := apiClient.DeleteInsightLog(ownerURI, ownerID); err != nil {
+		if err := apiClient.DeleteInsightLog(ownerURI, logID); err != nil {
 			return err
 		}
 
@@ -198,11 +196,10 @@ Examples:
 			return fmt.Errorf("failed to parse insights: %w", err)
 		}
 
-		var ownerURI, ownerID, title string
+		var ownerURI, title string
 		for _, log := range logs {
 			if log.ID == logID {
 				ownerURI = log.OwnerURI
-				ownerID = log.OwnerID
 				title = log.Title
 				break
 			}
@@ -212,7 +209,7 @@ Examples:
 			return fmt.Errorf("log not found: %s", logID)
 		}
 
-		if err := apiClient.DeleteInsightLogEntries(ownerURI, ownerID); err != nil {
+		if err := apiClient.DeleteInsightLogEntries(ownerURI, logID); err != nil {
 			return err
 		}
 

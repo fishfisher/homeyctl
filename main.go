@@ -1,6 +1,6 @@
 package main
 
-import "github.com/langtind/homeyctl/cmd"
+import "github.com/fishfisher/homeyctl/cmd"
 
 var (
 	version = "dev"
@@ -9,6 +9,7 @@ var (
 )
 
 func main() {
+	cmd.SetSkillFS(skillFS, "homeyctl-skill", "homeyctl")
 	cmd.SetVersionInfo(version, commit, date)
 	cmd.Execute()
 }

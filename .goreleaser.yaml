@@ -7,52 +7,48 @@ before:
     - go mod tidy
 
 builds:
-  - id: homeyctl
-    main: .
-    binary: homeyctl
-    env:
+  - env:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
       - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
-    targets:
-      - darwin_amd64
-      - darwin_arm64
-      - linux_amd64
-      - linux_arm64
-      - windows_amd64
-      - windows_arm64
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
 
 archives:
-  - builds:
-      - homeyctl
-    format: tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
+  - formats: ['binary']
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
 
-checksum:
-  name_template: "checksums.txt"
+brews:
+  - name: homeyctl
+    repository:
+      owner: fishfisher
+      name: homebrew-tap
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    homepage: https://github.com/fishfisher/homeyctl
+    description: "CLI for controlling Homey smart home"
+    download_strategy: FishfisherPrivateReleaseDownloadStrategy
+    custom_require: lib/private_strategy
+    install: |
+      bin.install Dir["homeyctl*"].first => "homeyctl"
+    test: |
+      assert_match "homeyctl", shell_output("#{bin}/homeyctl version")
 
 changelog:
   sort: asc
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
 
-brews:
-  - repository:
-      owner: langtind
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/langtind/homeyctl"
-    description: "CLI for controlling Homey smart home"
-    install: |
-      bin.install "homeyctl"
-    test: |
-      system "#{bin}/homeyctl", "version"
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"

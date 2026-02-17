@@ -9,9 +9,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/langtind/homeyctl/internal/client"
-	"github.com/langtind/homeyctl/internal/config"
-	"github.com/langtind/homeyctl/internal/oauth"
+	"github.com/fishfisher/homeyctl/internal/client"
+	"github.com/fishfisher/homeyctl/internal/config"
+	"github.com/fishfisher/homeyctl/internal/oauth"
 	"github.com/spf13/cobra"
 )
 
