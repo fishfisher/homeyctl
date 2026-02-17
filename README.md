@@ -364,27 +364,24 @@ homeyctl snapshot --include-flows            # Include flows
 ## Output Formats
 
 ```bash
-# JSON output (default, good for scripting)
+# Human-readable output (default)
 homeyctl devices list
 
-# Table output (human readable)
-homeyctl devices list --format table
-
-# Set default format
-homeyctl config set-format table
+# JSON output (for scripting)
+homeyctl devices list --json
 ```
 
 ### Parsing JSON with jq
 
 ```bash
 # Find devices by name
-homeyctl devices list | jq '.[] | select(.name | test("light";"i"))'
+homeyctl devices list --json | jq '.[] | select(.name | test("light";"i"))'
 
 # Get all enabled flows
-homeyctl flows list | jq '.[] | select(.enabled)'
+homeyctl flows list --json | jq '.[] | select(.enabled)'
 
 # Get device IDs in a zone
-homeyctl devices list | jq '.[] | select(.zone == "zone-id") | .id'
+homeyctl devices list --json | jq '.[] | select(.zone == "zone-id") | .id'
 ```
 
 ---
@@ -454,6 +451,5 @@ All config options can be set via environment variables (prefix `HOMEY_`):
 export HOMEY_MODE=auto              # auto, local, or cloud
 export HOMEY_LOCAL_ADDRESS=http://192.168.1.50
 export HOMEY_LOCAL_TOKEN=your-local-token
-export HOMEY_FORMAT=table           # json or table
 ```
 

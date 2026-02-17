@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -34,23 +34,23 @@ var insightsListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var logs []InsightLog
-			if err := json.Unmarshal(data, &logs); err != nil {
-				return fmt.Errorf("failed to parse insights: %w", err)
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "TITLE\tTYPE\tUNITS\tID")
-			fmt.Fprintln(w, "-----\t----\t-----\t--")
-			for _, l := range logs {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", l.Title, l.Type, l.Units, l.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var logs []InsightLog
+		if err := json.Unmarshal(data, &logs); err != nil {
+			return fmt.Errorf("failed to parse insights: %w", err)
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Title", "Type", "Units", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, l := range logs {
+			tbl.AddRow(l.Title, l.Type, l.Units, l.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -106,26 +106,26 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			var entryList []struct {
-				T time.Time   `json:"t"`
-				V interface{} `json:"v"`
-			}
-			if err := json.Unmarshal(entries, &entryList); err != nil {
-				return fmt.Errorf("failed to parse entries: %w", err)
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "TIME\tVALUE")
-			fmt.Fprintln(w, "----\t-----")
-			for _, e := range entryList {
-				fmt.Fprintf(w, "%s\t%v\n", e.T.Local().Format("2006-01-02 15:04"), e.V)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(entries)
 			return nil
 		}
 
-		outputJSON(entries)
+		var entryList []struct {
+			T time.Time   `json:"t"`
+			V interface{} `json:"v"`
+		}
+		if err := json.Unmarshal(entries, &entryList); err != nil {
+			return fmt.Errorf("failed to parse entries: %w", err)
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Time", "Value")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, e := range entryList {
+			tbl.AddRow(e.T.Local().Format("2006-01-02 15:04"), e.V)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -169,7 +169,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Deleted insight log: %s\n", title)
+		color.Green("Deleted insight log: %s\n", title)
 		return nil
 	},
 }
@@ -213,7 +213,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Cleared entries for: %s\n", title)
+		color.Green("Cleared entries for: %s\n", title)
 		return nil
 	},
 }

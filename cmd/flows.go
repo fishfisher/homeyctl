@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -97,25 +98,25 @@ Examples:
 			}
 		}
 
-		if isTableFormat() {
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tTYPE\tENABLED\tID")
-			fmt.Fprintln(w, "----\t----\t-------\t--")
-
-			for _, f := range allFlows {
-				enabled := "yes"
-				if !f.Enabled {
-					enabled = "no"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", f.Name, f.Type, enabled, f.ID)
-			}
-
-			w.Flush()
+		if isJSON() {
+			out, _ := json.MarshalIndent(allFlows, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		out, _ := json.MarshalIndent(allFlows, "", "  ")
-		fmt.Println(string(out))
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Type", "Enabled", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+
+		for _, f := range allFlows {
+			enabled := "yes"
+			if !f.Enabled {
+				enabled = "no"
+			}
+			tbl.AddRow(f.Name, f.Type, enabled, f.ID)
+		}
+
+		tbl.Print()
 		return nil
 	},
 }
@@ -142,7 +143,7 @@ var flowsTriggerCmd = &cobra.Command{
 				if err := apiClient.TriggerFlow(f.ID); err != nil {
 					return err
 				}
-				fmt.Printf("Triggered flow: %s\n", f.Name)
+				color.Green("Triggered flow: %s\n", f.Name)
 				return nil
 			}
 		}
@@ -153,7 +154,7 @@ var flowsTriggerCmd = &cobra.Command{
 				if err := apiClient.TriggerAdvancedFlow(f.ID); err != nil {
 					return err
 				}
-				fmt.Printf("Triggered advanced flow: %s\n", f.Name)
+				color.Green("Triggered advanced flow: %s\n", f.Name)
 				return nil
 			}
 		}
@@ -314,7 +315,7 @@ Examples:
 		if advanced {
 			flowType = "advanced flow"
 		}
-		fmt.Printf("Created %s: %s (ID: %s)\n", flowType, created.Name, created.ID)
+		color.Green("Created %s: %s (ID: %s)\n", flowType, created.Name, created.ID)
 		return nil
 	},
 }
@@ -471,7 +472,7 @@ Examples:
 				if err != nil {
 					return err
 				}
-				fmt.Printf("Updated flow: %s\n", f.Name)
+				color.Green("Updated flow: %s\n", f.Name)
 				return nil
 			}
 		}
@@ -483,7 +484,7 @@ Examples:
 				if err != nil {
 					return err
 				}
-				fmt.Printf("Updated advanced flow: %s\n", f.Name)
+				color.Green("Updated advanced flow: %s\n", f.Name)
 				return nil
 			}
 		}
@@ -514,7 +515,7 @@ var flowsDeleteCmd = &cobra.Command{
 				if err := apiClient.DeleteFlow(f.ID); err != nil {
 					return err
 				}
-				fmt.Printf("Deleted flow: %s\n", f.Name)
+				color.Green("Deleted flow: %s\n", f.Name)
 				return nil
 			}
 		}
@@ -525,7 +526,7 @@ var flowsDeleteCmd = &cobra.Command{
 				if err := apiClient.DeleteAdvancedFlow(f.ID); err != nil {
 					return err
 				}
-				fmt.Printf("Deleted advanced flow: %s\n", f.Name)
+				color.Green("Deleted advanced flow: %s\n", f.Name)
 				return nil
 			}
 		}
@@ -578,31 +579,109 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			var cards []struct {
-				ID    string `json:"id"`
-				Title string `json:"title"`
-			}
-			if err := json.Unmarshal(data, &cards); err != nil {
-				return err
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "TITLE\tID")
-			fmt.Fprintln(w, "-----\t--")
-
-			for _, c := range cards {
-				if filter != "" && !strings.Contains(strings.ToLower(c.ID), strings.ToLower(filter)) &&
-					!strings.Contains(strings.ToLower(c.Title), strings.ToLower(filter)) {
-					continue
-				}
-				fmt.Fprintf(w, "%s\t%s\n", c.Title, c.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var cards []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		}
+		if err := json.Unmarshal(data, &cards); err != nil {
+			return err
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Title", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+
+		for _, c := range cards {
+			if filter != "" && !strings.Contains(strings.ToLower(c.ID), strings.ToLower(filter)) &&
+				!strings.Contains(strings.ToLower(c.Title), strings.ToLower(filter)) {
+				continue
+			}
+			tbl.AddRow(c.Title, c.ID)
+		}
+		tbl.Print()
+		return nil
+	},
+}
+
+var flowsAutocompleteCmd = &cobra.Command{
+	Use:   "autocomplete <card-id> <arg-name>",
+	Short: "Query autocomplete values for a flow card argument",
+	Long: `Query the dynamic autocomplete list for a flow card argument.
+
+Some flow card arguments (like Sonos favourites) are populated dynamically
+by the app at runtime. Use this command to discover valid values.
+
+The card ID is the full ID including the owner URI prefix
+(e.g., homey:device:<device-id>:<card-name>). The ownerUri is derived
+automatically from the card ID.
+
+Examples:
+  # List all Sonos favourites
+  homeyctl flows autocomplete "homey:device:55fb5f52-462d-4175-ba96-17c54c40a96b:cloud_play_sonos_favorite" favorite
+
+  # Search for a specific favourite
+  homeyctl flows autocomplete "homey:device:55fb5f52-462d-4175-ba96-17c54c40a96b:cloud_play_sonos_favorite" favorite --query "golden"
+
+  # Query a condition card
+  homeyctl flows autocomplete "homey:device:abc123:some_condition" mode --type condition`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cardID := args[0]
+		argName := args[1]
+		query, _ := cmd.Flags().GetString("query")
+		cardTypeFlag, _ := cmd.Flags().GetString("type")
+
+		// Map short type names to API card type
+		var cardType string
+		switch cardTypeFlag {
+		case "action":
+			cardType = "flowcardaction"
+		case "condition":
+			cardType = "flowcardcondition"
+		case "trigger":
+			cardType = "flowcardtrigger"
+		default:
+			return fmt.Errorf("invalid card type: %s (use: action, condition, trigger)", cardTypeFlag)
+		}
+
+		// Derive ownerUri from card ID: everything except the last :segment
+		lastColon := strings.LastIndex(cardID, ":")
+		if lastColon == -1 {
+			return fmt.Errorf("invalid card ID format: %s (expected format like homey:device:<id>:<card>)", cardID)
+		}
+		ownerURI := cardID[:lastColon]
+
+		data, err := apiClient.GetFlowCardAutocomplete(cardType, ownerURI, cardID, argName, query)
+		if err != nil {
+			return err
+		}
+
+		if isJSON() {
+			outputJSON(data)
+			return nil
+		}
+
+		var items []struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal(data, &items); err != nil {
+			return err
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Description", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, item := range items {
+			tbl.AddRow(item.Name, item.Description, item.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -617,8 +696,12 @@ func init() {
 	flowsCmd.AddCommand(flowsTriggerCmd)
 	flowsCmd.AddCommand(flowsDeleteCmd)
 	flowsCmd.AddCommand(flowsCardsCmd)
+	flowsCmd.AddCommand(flowsAutocompleteCmd)
 
 	flowsCreateCmd.Flags().Bool("advanced", false, "Create an advanced flow")
 	flowsCardsCmd.Flags().String("type", "action", "Card type: trigger, condition, action")
 	flowsCardsCmd.Flags().String("filter", "", "Filter cards by name or ID")
+
+	flowsAutocompleteCmd.Flags().String("query", "", "Search query to filter results")
+	flowsAutocompleteCmd.Flags().String("type", "action", "Card type: action, condition, trigger")
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -28,18 +29,18 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			var app struct {
-				ID      string `json:"id"`
-				Name    string `json:"name"`
-				Version string `json:"version"`
-			}
-			json.Unmarshal(result, &app)
-			fmt.Printf("Installed app: %s v%s\n", app.Name, app.Version)
+		if isJSON() {
+			outputJSON(result)
 			return nil
 		}
 
-		outputJSON(result)
+		var app struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		}
+		json.Unmarshal(result, &app)
+		color.Green("Installed app: %s v%s\n", app.Name, app.Version)
 		return nil
 	},
 }
@@ -58,7 +59,7 @@ var appsUninstallCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Uninstalled app: %s\n", app.Name)
+		color.Green("Uninstalled app: %s\n", app.Name)
 		return nil
 	},
 }
@@ -77,7 +78,7 @@ var appsEnableCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Enabled app: %s\n", app.Name)
+		color.Green("Enabled app: %s\n", app.Name)
 		return nil
 	},
 }
@@ -96,7 +97,7 @@ var appsDisableCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Disabled app: %s\n", app.Name)
+		color.Green("Disabled app: %s\n", app.Name)
 		return nil
 	},
 }
@@ -126,7 +127,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Updated app: %s (autoupdate: %v)\n", app.Name, autoupdate)
+		color.Green("Updated app: %s (autoupdate: %v)\n", app.Name, autoupdate)
 		return nil
 	},
 }
@@ -178,7 +179,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Set %s.%s = %v\n", app.Name, settingName, value)
+		color.Green("Set %s.%s = %v\n", app.Name, settingName, value)
 		return nil
 	},
 }
@@ -202,22 +203,22 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			var usage struct {
-				CPU    float64 `json:"cpu"`
-				Memory int64   `json:"memory"`
-			}
-			if err := json.Unmarshal(data, &usage); err != nil {
-				return err
-			}
-
-			fmt.Printf("App: %s\n", app.Name)
-			fmt.Printf("CPU:    %.2f%%\n", usage.CPU*100)
-			fmt.Printf("Memory: %.2f MB\n", float64(usage.Memory)/(1024*1024))
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var usage struct {
+			CPU    float64 `json:"cpu"`
+			Memory int64   `json:"memory"`
+		}
+		if err := json.Unmarshal(data, &usage); err != nil {
+			return err
+		}
+
+		color.New(color.Bold).Println(app.Name)
+		fmt.Printf("  CPU:    %.2f%%\n", usage.CPU*100)
+		fmt.Printf("  Memory: %.2f MB\n", float64(usage.Memory)/(1024*1024))
 		return nil
 	},
 }

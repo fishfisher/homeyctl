@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"testing"
-
-	"github.com/fishfisher/homeyctl/internal/config"
 )
 
 func TestMaskToken_Empty(t *testing.T) {
@@ -29,57 +27,24 @@ func TestMaskToken_Long(t *testing.T) {
 	}
 }
 
-func TestConfigDefaultFormat(t *testing.T) {
-	// Test that config.Load returns json as default format
-	cfg := &config.Config{}
-	if cfg.Format != "" {
-		t.Errorf("empty config Format = %q, want empty string", cfg.Format)
-	}
+func TestIsJSON_Default(t *testing.T) {
+	// Save and restore the global jsonFlag
+	oldFlag := jsonFlag
+	defer func() { jsonFlag = oldFlag }()
 
-	// The default is set by viper, but when empty we should treat it as json
-	// This is tested implicitly by checking config package defaults
-}
-
-func TestIsTableFormat_NilConfig(t *testing.T) {
-	// Save and restore the global cfg
-	oldCfg := cfg
-	defer func() { cfg = oldCfg }()
-
-	cfg = nil
-	if isTableFormat() {
-		t.Error("isTableFormat() with nil cfg should return false")
+	jsonFlag = false
+	if isJSON() {
+		t.Error("isJSON() should return false when --json flag is not set")
 	}
 }
 
-func TestIsTableFormat_JsonFormat(t *testing.T) {
-	// Save and restore the global cfg
-	oldCfg := cfg
-	defer func() { cfg = oldCfg }()
+func TestIsJSON_FlagSet(t *testing.T) {
+	// Save and restore the global jsonFlag
+	oldFlag := jsonFlag
+	defer func() { jsonFlag = oldFlag }()
 
-	cfg = &config.Config{Format: "json"}
-	if isTableFormat() {
-		t.Error("isTableFormat() with json format should return false")
-	}
-}
-
-func TestIsTableFormat_TableFormat(t *testing.T) {
-	// Save and restore the global cfg
-	oldCfg := cfg
-	defer func() { cfg = oldCfg }()
-
-	cfg = &config.Config{Format: "table"}
-	if !isTableFormat() {
-		t.Error("isTableFormat() with table format should return true")
-	}
-}
-
-func TestIsTableFormat_EmptyFormat(t *testing.T) {
-	// Save and restore the global cfg
-	oldCfg := cfg
-	defer func() { cfg = oldCfg }()
-
-	cfg = &config.Config{Format: ""}
-	if isTableFormat() {
-		t.Error("isTableFormat() with empty format should return false (default to json)")
+	jsonFlag = true
+	if !isJSON() {
+		t.Error("isJSON() should return true when --json flag is set")
 	}
 }

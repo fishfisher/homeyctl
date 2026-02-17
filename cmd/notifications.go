@@ -3,9 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +35,7 @@ var notifySendCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Notification sent: %s\n", message)
+		color.Green("Notification sent: %s\n", message)
 		return nil
 	},
 }
@@ -49,32 +49,32 @@ var notifyListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var notifications map[string]Notification
-			if err := json.Unmarshal(data, &notifications); err != nil {
-				return fmt.Errorf("failed to parse notifications: %w", err)
-			}
+		var notifications map[string]Notification
+		if err := json.Unmarshal(data, &notifications); err != nil {
+			return fmt.Errorf("failed to parse notifications: %w", err)
+		}
 
-			if len(notifications) == 0 {
-				fmt.Println("No notifications found.")
-				return nil
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "DATE\tMESSAGE\tID")
-			fmt.Fprintln(w, "----\t-------\t--")
-			for _, n := range notifications {
-				excerpt := n.Excerpt
-				if len(excerpt) > 50 {
-					excerpt = excerpt[:47] + "..."
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\n", n.Date, excerpt, n.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		if len(notifications) == 0 {
+			fmt.Println("No notifications found.")
+			return nil
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Date", "Message", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, n := range notifications {
+			excerpt := n.Excerpt
+			if len(excerpt) > 50 {
+				excerpt = excerpt[:47] + "..."
+			}
+			tbl.AddRow(n.Date, excerpt, n.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -88,7 +88,7 @@ var notifyDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted notification: %s\n", args[0])
+		color.Green("Deleted notification: %s\n", args[0])
 		return nil
 	},
 }
@@ -101,7 +101,7 @@ var notifyClearCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Println("Cleared all notifications")
+		color.Green("Cleared all notifications\n")
 		return nil
 	},
 }

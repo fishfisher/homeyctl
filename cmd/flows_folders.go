@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -53,32 +53,32 @@ var flowsFoldersListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var folders map[string]FlowFolder
-			if err := json.Unmarshal(data, &folders); err != nil {
-				return fmt.Errorf("failed to parse flow folders: %w", err)
-			}
-
-			if len(folders) == 0 {
-				fmt.Println("No flow folders found.")
-				return nil
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tPARENT\tID")
-			fmt.Fprintln(w, "----\t------\t--")
-			for _, f := range folders {
-				parent := f.Parent
-				if parent == "" {
-					parent = "(root)"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\n", f.Name, parent, f.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var folders map[string]FlowFolder
+		if err := json.Unmarshal(data, &folders); err != nil {
+			return fmt.Errorf("failed to parse flow folders: %w", err)
+		}
+
+		if len(folders) == 0 {
+			fmt.Println("No flow folders found.")
+			return nil
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Parent", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, f := range folders {
+			parent := f.Parent
+			if parent == "" {
+				parent = "(root)"
+			}
+			tbl.AddRow(f.Name, parent, f.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -133,12 +133,12 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Created flow folder: %s\n", name)
+		if isJSON() {
+			outputJSON(result)
 			return nil
 		}
 
-		outputJSON(result)
+		color.Green("Created flow folder: %s\n", name)
 		return nil
 	},
 }
@@ -180,7 +180,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Updated flow folder: %s\n", folder.Name)
+		color.Green("Updated flow folder: %s\n", folder.Name)
 		return nil
 	},
 }
@@ -199,7 +199,7 @@ var flowsFoldersDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted flow folder: %s\n", folder.Name)
+		color.Green("Deleted flow folder: %s\n", folder.Name)
 		return nil
 	},
 }

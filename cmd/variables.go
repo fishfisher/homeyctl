@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -33,23 +33,23 @@ var varsListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var vars map[string]Variable
-			if err := json.Unmarshal(data, &vars); err != nil {
-				return fmt.Errorf("failed to parse variables: %w", err)
-			}
+		var vars map[string]Variable
+		if err := json.Unmarshal(data, &vars); err != nil {
+			return fmt.Errorf("failed to parse variables: %w", err)
+		}
 
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tTYPE\tVALUE\tID")
-			fmt.Fprintln(w, "----\t----\t-----\t--")
-			for _, v := range vars {
-				fmt.Fprintf(w, "%s\t%s\t%v\t%s\n", v.Name, v.Type, v.Value, v.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Type", "Value", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, v := range vars {
+			tbl.AddRow(v.Name, v.Type, v.Value, v.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -84,16 +84,16 @@ var varsGetCmd = &cobra.Command{
 			return fmt.Errorf("variable not found: %s", nameOrID)
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Name:  %s\n", variable.Name)
-			fmt.Printf("Type:  %s\n", variable.Type)
-			fmt.Printf("Value: %v\n", variable.Value)
-			fmt.Printf("ID:    %s\n", variable.ID)
+		if isJSON() {
+			out, _ := json.MarshalIndent(variable, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		out, _ := json.MarshalIndent(variable, "", "  ")
-		fmt.Println(string(out))
+		color.New(color.Bold).Println(variable.Name)
+		fmt.Printf("  Type:  %s\n", variable.Type)
+		fmt.Printf("  Value: %v\n", variable.Value)
+		fmt.Printf("  ID:    %s\n", variable.ID)
 		return nil
 	},
 }
@@ -148,7 +148,7 @@ var varsSetCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Set %s = %v\n", variable.Name, value)
+		color.Green("Set %s = %v\n", variable.Name, value)
 		return nil
 	},
 }
@@ -200,9 +200,9 @@ Examples:
 
 		var created Variable
 		if err := json.Unmarshal(result, &created); err == nil {
-			fmt.Printf("Created variable: %s (id: %s)\n", created.Name, created.ID)
+			color.Green("Created variable: %s (id: %s)\n", created.Name, created.ID)
 		} else {
-			fmt.Println("Variable created")
+			color.Green("Variable created\n")
 		}
 		return nil
 	},
@@ -242,7 +242,7 @@ var varsDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted variable: %s\n", variable.Name)
+		color.Green("Deleted variable: %s\n", variable.Name)
 		return nil
 	},
 }

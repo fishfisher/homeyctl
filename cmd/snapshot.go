@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,7 @@ Useful for AI assistants and scripts that need a complete overview.
 Examples:
   homeyctl snapshot
   homeyctl snapshot --include-flows
-  homeyctl snapshot --format json`,
+  homeyctl snapshot --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get system status
 		systemData, err := apiClient.GetSystem()
@@ -66,31 +67,31 @@ Examples:
 			snapshot["advancedFlows"] = advFlowsData
 		}
 
-		if isTableFormat() {
-			var system map[string]interface{}
-			json.Unmarshal(systemData, &system)
-
-			fmt.Println("Homey Snapshot")
-			fmt.Println("==============")
-			fmt.Printf("Model:     %v\n", system["homeyModelName"])
-			fmt.Printf("Version:   %v\n", system["homeyVersion"])
-			fmt.Printf("Platform:  %v (v%v)\n", system["homeyPlatform"], system["homeyPlatformVersion"])
-			fmt.Printf("Hostname:  %v\n", system["hostname"])
-			fmt.Printf("Zones:     %d\n", len(zones))
-			fmt.Printf("Devices:   %d\n", len(devices))
-
-			if snapshotIncludeFlows {
-				var flows, advFlows map[string]interface{}
-				json.Unmarshal(snapshot["flows"], &flows)
-				json.Unmarshal(snapshot["advancedFlows"], &advFlows)
-				fmt.Printf("Flows:     %d\n", len(flows))
-				fmt.Printf("Advanced:  %d\n", len(advFlows))
-			}
+		if isJSON() {
+			out, _ := json.MarshalIndent(snapshot, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		out, _ := json.MarshalIndent(snapshot, "", "  ")
-		fmt.Println(string(out))
+		var system map[string]interface{}
+		json.Unmarshal(systemData, &system)
+
+		color.New(color.Bold).Println("Homey Snapshot")
+		fmt.Println("==============")
+		fmt.Printf("Model:     %v\n", system["homeyModelName"])
+		fmt.Printf("Version:   %v\n", system["homeyVersion"])
+		fmt.Printf("Platform:  %v (v%v)\n", system["homeyPlatform"], system["homeyPlatformVersion"])
+		fmt.Printf("Hostname:  %v\n", system["hostname"])
+		fmt.Printf("Zones:     %d\n", len(zones))
+		fmt.Printf("Devices:   %d\n", len(devices))
+
+		if snapshotIncludeFlows {
+			var flows, advFlows map[string]interface{}
+			json.Unmarshal(snapshot["flows"], &flows)
+			json.Unmarshal(snapshot["advancedFlows"], &advFlows)
+			fmt.Printf("Flows:     %d\n", len(flows))
+			fmt.Printf("Advanced:  %d\n", len(advFlows))
+		}
 		return nil
 	},
 }

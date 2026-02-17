@@ -10,31 +10,42 @@ Control your Athom Homey Pro smart home hub using the `homeyctl` CLI. This skill
 
 ## Setup & Configuration
 
-### Automatic Setup (Easiest)
+### Interactive Setup (Easiest)
 
-If user can use browser:
 ```bash
-homeyctl login
+homeyctl auth
 ```
 
-This handles authentication and discovery automatically.
+This presents an interactive menu to choose your authentication method.
 
-### Manual Setup (For AI/Automation)
+### OAuth Login (Browser)
 
-If user provides token from https://my.homey.app/ → Settings → API Keys:
-
-1. **Get Homey hostname/IP:**
-   - Ask user: "What is your Homey's IP address or hostname?"
-   - User can find this in Homey app or on https://my.homey.app/ (Settings → System)
-   - Format: IP like `192.168.1.100` or `.local` hostname like `homey-xxxxx.local`
-
-2. **Configure:**
 ```bash
-homeyctl config set-host <user-provided-host>
-homeyctl config set-token <user-provided-token>
+homeyctl auth login
 ```
 
-3. **Verify:**
+Opens your browser to log in with your Athom account. Creates a scoped token automatically.
+
+**Note:** OAuth tokens have scope limitations. For full access (including flow updates), use an API key instead.
+
+### API Key (Recommended for Power Users)
+
+```bash
+homeyctl auth api-key <token>
+```
+
+API keys from my.homey.app give full access with no scope limitations:
+1. Go to https://my.homey.app/ → Settings → API Keys → New API Key
+2. Copy the key and run: `homeyctl auth api-key <key>`
+
+### Check Auth Status
+
+```bash
+homeyctl auth status
+```
+
+### Verify Setup
+
 ```bash
 homeyctl devices list
 ```
@@ -77,12 +88,12 @@ homeyctl energy report day
 
 The user should create a readonly token for you:
 ```bash
-homeyctl token create "AI Bot" --preset readonly --no-save
+homeyctl auth token create "AI Bot" --preset readonly --no-save
 ```
 
 Available presets:
 - **readonly** - Safe for AI exploration (list/get only)
-- **control** - Read + control devices, trigger flows
+- **control** - Read + control devices, full flow access
 - **full** - Full access (same as owner)
 
 If you try an operation without permissions, you'll see: `Error: 403 Missing Scopes`
@@ -152,7 +163,73 @@ homeyctl flows folders update "Automation" updated-folder.json
 homeyctl flows folders delete "Old Folder"
 ```
 
-**Flow structure:** See `references/homeyctl-ai-context.md` for complete flow JSON format and examples.
+#### Flow JSON Format
+
+```json
+{
+  "name": "Turn on lights when arriving",
+  "trigger": {
+    "id": "homey:manager:presence:user_enter",
+    "args": { "user": "user-uuid-here" }
+  },
+  "conditions": [
+    {
+      "id": "homey:manager:logic:lt",
+      "args": { "value": 20 },
+      "droptoken": "homey:device:<device-id>|measure_temperature"
+    }
+  ],
+  "actions": [
+    {
+      "id": "homey:device:<device-id>:thermostat_mode_heat",
+      "args": { "mode": "heat" }
+    }
+  ]
+}
+```
+
+**Critical: Droptoken format uses pipe (`|`), not colon:**
+```
+CORRECT: "homey:device:abc123|measure_temperature"
+WRONG:   "homey:device:abc123:measure_temperature"
+```
+
+**ID Format Reference:**
+
+| Type | Format | Example |
+|------|--------|---------|
+| Device action | homey:device:\<id\>:\<capability\> | homey:device:abc123:on |
+| Manager trigger | homey:manager:\<manager\>:\<event\> | homey:manager:presence:user_enter |
+| Logic condition | homey:manager:logic:\<operator\> | homey:manager:logic:lt |
+| Droptoken | homey:device:\<id\>\|\<capability\> | homey:device:abc123\|measure_temperature |
+
+**Common Triggers:**
+- `homey:manager:presence:user_enter` - User arrives home
+- `homey:manager:presence:user_leave` - User leaves home
+- `homey:manager:time:time` - At specific time
+- `homey:device:<id>:<capability>_changed` - Device state changes
+
+**Common Conditions:**
+- `homey:manager:logic:lt` - Less than (use with droptoken)
+- `homey:manager:logic:gt` - Greater than (use with droptoken)
+- `homey:manager:logic:eq` - Equals (use with droptoken)
+
+**Flow Update Behavior:**
+
+`homeyctl flows update` does a **partial/merge update**:
+- Only fields you include will be changed
+- Omitted fields keep their existing values
+- To remove conditions/actions, explicitly set empty array: `"conditions": []`
+
+```bash
+# Rename a flow
+echo '{"name": "New Name"}' > rename.json
+homeyctl flows update "Old Name" rename.json
+
+# Remove all conditions from a flow
+echo '{"conditions": []}' > clear.json
+homeyctl flows update "My Flow" clear.json
+```
 
 ### 3. Energy Monitoring
 
@@ -359,36 +436,47 @@ homeyctl snapshot
 # Include flows in snapshot
 homeyctl snapshot --include-flows
 
-# Table format for quick overview
-homeyctl snapshot --format table
+# JSON output for scripting
+homeyctl snapshot --json
 ```
 
 ## Output Formats
 
 ```bash
-# JSON output (default, machine-readable)
+# Human-readable output (default)
 homeyctl devices list
 
-# Table output (human-readable)
-homeyctl devices list --format table
-
-# Set default format globally
-homeyctl config set-format table
+# JSON output (machine-readable)
+homeyctl devices list --json
 ```
 
-## Resources
+All list commands with `--json` return flat JSON arrays for easy parsing:
+```bash
+# Find flow by name
+homeyctl flows list --json | jq '.[] | select(.name | test("pult";"i"))'
 
-### references/homeyctl-ai-context.md
+# Get all enabled flows
+homeyctl flows list --json | jq '.[] | select(.enabled)'
 
-Complete documentation including:
-- Full flow JSON format and schema
-- Flow creation examples (simple and advanced)
-- Device capability reference
-- API token scoping details
-- Detailed command reference
+# Get device IDs by name
+homeyctl devices list --json | jq '.[] | select(.name | test("office";"i")) | .id'
+```
 
-**Load this file when:**
-- Creating or modifying flows
-- Need detailed flow JSON examples
-- Need device capability reference
-- Troubleshooting API errors
+## Connection Modes
+
+```bash
+homeyctl config set-mode auto     # Auto-detect best connection (default)
+homeyctl config set-mode local    # Force local network connection
+homeyctl config set-mode cloud    # Force cloud connection
+```
+
+## Workflow Tips
+
+1. **Use snapshot for context**: Run `homeyctl snapshot` to get complete system overview in one call
+2. **Filter lists**: Use `--filter "name"` on list commands to quickly find items
+3. **Device shortcuts**: Use `homeyctl devices on/off <device>` instead of setting `onoff` capability
+4. **Get device IDs first**: Run `homeyctl devices list` to find device IDs
+5. **Get user IDs**: Run `homeyctl users list` for presence triggers
+6. **Check capabilities**: Run `homeyctl devices get <id>` to see available capabilities
+7. **Validate before creating**: The CLI validates flow JSON and warns about common mistakes
+8. **Test flows**: Use `homeyctl flows trigger "Flow Name"` to test manually

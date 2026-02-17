@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -69,24 +69,24 @@ Device groups are virtual devices that control multiple physical devices togethe
 			}
 		}
 
-		if isTableFormat() {
-			if len(groups) == 0 {
-				fmt.Println("No device groups found.")
-				return nil
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tCLASS\tDEVICES\tID")
-			fmt.Fprintln(w, "----\t-----\t-------\t--")
-			for _, g := range groups {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", g.Name, g.Class, len(g.Devices), g.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			out, _ := json.MarshalIndent(groups, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		out, _ := json.MarshalIndent(groups, "", "  ")
-		fmt.Println(string(out))
+		if len(groups) == 0 {
+			fmt.Println("No device groups found.")
+			return nil
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Class", "Devices", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, g := range groups {
+			tbl.AddRow(g.Name, g.Class, len(g.Devices), g.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -157,12 +157,12 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Created device group '%s' with %d devices\n", name, len(deviceIDs))
+		if isJSON() {
+			outputJSON(result)
 			return nil
 		}
 
-		outputJSON(result)
+		color.Green("Created device group '%s' with %d devices\n", name, len(deviceIDs))
 		return nil
 	},
 }
@@ -276,7 +276,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Updated device group '%s'\n", device.Name)
+		color.Green("Updated device group '%s'\n", device.Name)
 		return nil
 	},
 }
@@ -304,7 +304,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Removed '%s' from group '%s'\n", device.Name, group.Name)
+		color.Green("Removed '%s' from group '%s'\n", device.Name, group.Name)
 		return nil
 	},
 }

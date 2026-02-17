@@ -3,9 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -33,27 +33,27 @@ var usersListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var users map[string]User
-			if err := json.Unmarshal(data, &users); err != nil {
-				return fmt.Errorf("failed to parse users: %w", err)
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tROLE\tPRESENT\tID")
-			fmt.Fprintln(w, "----\t----\t-------\t--")
-			for _, u := range users {
-				present := "no"
-				if u.Present {
-					present = "yes"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Name, u.Role, present, u.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var users map[string]User
+		if err := json.Unmarshal(data, &users); err != nil {
+			return fmt.Errorf("failed to parse users: %w", err)
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Role", "Present", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, u := range users {
+			present := "no"
+			if u.Present {
+				present = "yes"
+			}
+			tbl.AddRow(u.Name, u.Role, present, u.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }

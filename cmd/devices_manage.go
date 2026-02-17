@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +31,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Renamed device '%s' to '%s'\n", device.Name, newName)
+		color.Green("Renamed device '%s' to '%s'\n", device.Name, newName)
 		return nil
 	},
 }
@@ -67,7 +66,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Moved device '%s' to zone '%s'\n", device.Name, zone.Name)
+		color.Green("Moved device '%s' to zone '%s'\n", device.Name, zone.Name)
 		return nil
 	},
 }
@@ -98,9 +97,9 @@ Examples:
 		}
 
 		if args[1] == "" {
-			fmt.Printf("Cleared note for device '%s'\n", device.Name)
+			color.Green("Cleared note for device '%s'\n", device.Name)
 		} else {
-			fmt.Printf("Set note for device '%s': %s\n", device.Name, args[1])
+			color.Green("Set note for device '%s': %s\n", device.Name, args[1])
 		}
 		return nil
 	},
@@ -132,9 +131,9 @@ Examples:
 		}
 
 		if args[1] == "" {
-			fmt.Printf("Reset icon for device '%s' to default\n", device.Name)
+			color.Green("Reset icon for device '%s' to default\n", device.Name)
 		} else {
-			fmt.Printf("Set icon for device '%s' to '%s'\n", device.Name, args[1])
+			color.Green("Set icon for device '%s' to '%s'\n", device.Name, args[1])
 		}
 		return nil
 	},
@@ -164,7 +163,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Hidden device '%s' from UI\n", device.Name)
+		color.Green("Hidden device '%s' from UI\n", device.Name)
 		return nil
 	},
 }
@@ -191,7 +190,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Unhidden device '%s' - now visible in UI\n", device.Name)
+		color.Green("Unhidden device '%s' - now visible in UI\n", device.Name)
 		return nil
 	},
 }
@@ -210,7 +209,7 @@ var devicesDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted device: %s\n", device.Name)
+		color.Green("Deleted device: %s\n", device.Name)
 		return nil
 	},
 }

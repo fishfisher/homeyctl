@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -29,24 +29,24 @@ and driver-specific settings.`,
 			return err
 		}
 
-		if isTableFormat() {
-			var settingsMap map[string]interface{}
-			if err := json.Unmarshal(settings, &settingsMap); err != nil {
-				return fmt.Errorf("failed to parse settings: %w", err)
-			}
-
-			fmt.Printf("Settings for %s:\n\n", device.Name)
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "SETTING\tVALUE")
-			fmt.Fprintln(w, "-------\t-----")
-			for key, val := range settingsMap {
-				fmt.Fprintf(w, "%s\t%v\n", key, val)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(settings)
 			return nil
 		}
 
-		outputJSON(settings)
+		var settingsMap map[string]interface{}
+		if err := json.Unmarshal(settings, &settingsMap); err != nil {
+			return fmt.Errorf("failed to parse settings: %w", err)
+		}
+
+		color.New(color.Bold).Printf("Settings for %s:\n\n", device.Name)
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Setting", "Value")
+		tbl.WithHeaderFormatter(headerFmt)
+		for key, val := range settingsMap {
+			tbl.AddRow(key, val)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -92,12 +92,12 @@ To change device settings, create an API key at my.homey.app:
   1. Go to https://my.homey.app
   2. Select your Homey → Settings → API Keys
   3. Create a new API key (it will have full access)
-  4. Run: homeyctl config set-token <your-api-key>`)
+  4. Run: homeyctl auth api-key <your-api-key>`)
 			}
 			return err
 		}
 
-		fmt.Printf("Set %s setting %s = %v\n", device.Name, settingKey, value)
+		color.Green("Set %s setting %s = %v\n", device.Name, settingKey, value)
 		return nil
 	},
 }

@@ -1,17 +1,19 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/fishfisher/homeyctl/internal/client"
 	"github.com/fishfisher/homeyctl/internal/config"
 	"github.com/fishfisher/homeyctl/internal/oauth"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -93,8 +95,7 @@ var scopePresets = map[string][]string{
 	"control": {
 		"homey.device.readonly",
 		"homey.device.control",
-		"homey.flow.readonly",
-		"homey.flow.start",
+		"homey.flow",
 		"homey.zone.readonly",
 		"homey.app.readonly",
 		"homey.insights.readonly",
@@ -106,7 +107,264 @@ var scopePresets = map[string][]string{
 	},
 }
 
-var tokenCmd = &cobra.Command{
+var authCmd = &cobra.Command{
+	Use:   "auth",
+	Short: "Authenticate with your Homey",
+	Long: `Authenticate with your Homey smart home hub.
+
+Choose an authentication method:
+
+  1) OAuth Login  - Log in via browser (creates scoped token)
+  2) API Key      - Paste a key from my.homey.app Settings > API Keys
+  3) Status       - Show current authentication info
+
+Subcommands:
+  homeyctl auth login          OAuth browser login
+  homeyctl auth api-key <key>  Set API key from my.homey.app
+  homeyctl auth status         Show current auth state
+  homeyctl auth token          Manage Personal Access Tokens`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("How would you like to authenticate?")
+		fmt.Println()
+		fmt.Println("  1) OAuth Login  — Log in via browser (creates scoped token)")
+		fmt.Println("  2) API Key      — Paste a key from my.homey.app > Settings > API Keys")
+		fmt.Println("  3) Status       — Show current authentication info")
+		fmt.Println()
+		fmt.Print("Choose [1-3]: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+		input = strings.TrimSpace(input)
+
+		switch input {
+		case "1":
+			return authLoginCmd.RunE(cmd, nil)
+		case "2":
+			fmt.Print("Paste your API key: ")
+			key, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+			key = strings.TrimSpace(key)
+			if key == "" {
+				return fmt.Errorf("API key cannot be empty")
+			}
+			return runAPIKey(key)
+		case "3":
+			return runAuthStatus()
+		default:
+			return fmt.Errorf("invalid choice: %s (enter 1, 2, or 3)", input)
+		}
+	},
+}
+
+var authLoginCmd = &cobra.Command{
+	Use:   "login",
+	Short: "Log in via OAuth browser flow",
+	Long: `Log in to your Homey with your Athom account.
+
+This is the easiest way to get started with homeyctl:
+  1. Opens your browser to log in with your Athom account
+  2. Creates an API token with device control access
+  3. Saves it to your config
+
+After login, you can immediately use homeyctl:
+  homeyctl devices list
+  homeyctl flows list
+
+Note: OAuth tokens are scoped. For full access (including flow updates),
+use an API key instead: homeyctl auth api-key <key>`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("Logging in to your Homey...")
+		fmt.Println()
+
+		// Do OAuth login
+		homey, err := oauth.Login()
+		if err != nil {
+			return fmt.Errorf("login failed: %w", err)
+		}
+
+		// Determine which URL to use
+		homeyURL := homey.LocalURLSecure
+		if homeyURL == "" {
+			homeyURL = homey.LocalURL
+		}
+		if homeyURL == "" {
+			homeyURL = homey.RemoteURL
+		}
+
+		// Parse URL
+		parsedURL, err := url.Parse(homeyURL)
+		if err != nil {
+			return fmt.Errorf("failed to parse Homey URL: %w", err)
+		}
+
+		host := parsedURL.Hostname()
+		port := 443
+		if parsedURL.Port() != "" {
+			fmt.Sscanf(parsedURL.Port(), "%d", &port)
+		} else if parsedURL.Scheme == "http" {
+			port = 80
+		}
+
+		// Create temporary config for API client
+		tempCfg := &config.Config{
+			Host:  host,
+			Port:  port,
+			Token: homey.Token,
+			TLS:   parsedURL.Scheme == "https",
+		}
+
+		// Create a "control" preset token for the user
+		tempClient := client.New(tempCfg)
+		scopes := scopePresets["control"]
+
+		data, err := tempClient.CreatePAT("homeyctl", scopes)
+		if err != nil {
+			// If token creation fails, save the OAuth session token instead
+			// (less ideal but still works)
+			fmt.Println("Note: Could not create scoped token, using session token.")
+			if saveErr := config.Save(tempCfg); saveErr != nil {
+				return fmt.Errorf("failed to save config: %w", saveErr)
+			}
+			fmt.Println()
+			fmt.Printf("Logged in to: %s\n", homey.Name)
+			fmt.Println()
+			fmt.Println("You're ready to use homeyctl!")
+			fmt.Println("Try: homeyctl devices list")
+			return nil
+		}
+
+		var resp PATCreateResponse
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+
+		// Save the PAT to config
+		newCfg := &config.Config{
+			Host:  host,
+			Port:  port,
+			Token: resp.Token,
+			TLS:   parsedURL.Scheme == "https",
+		}
+
+		if err := config.Save(newCfg); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		fmt.Println()
+		fmt.Printf("Logged in to: %s\n", homey.Name)
+		fmt.Println()
+		fmt.Println("You're ready to use homeyctl!")
+		fmt.Println("Try: homeyctl devices list")
+
+		return nil
+	},
+}
+
+var authAPIKeyCmd = &cobra.Command{
+	Use:   "api-key <token>",
+	Short: "Set API key from my.homey.app",
+	Long: `Set an API key created from the Homey web interface.
+
+How to create an API key:
+  1. Go to https://my.homey.app/
+  2. Select your Homey
+  3. Click Settings (gear icon, bottom left)
+  4. Click API Keys
+  5. Click "+ New API Key"
+  6. Copy the generated key and paste it here
+
+API keys give full access to your Homey (no scope limitations unlike
+OAuth-created tokens). This is the best method for full control of
+flows, devices, and all other Homey features.
+
+Example:
+  homeyctl auth api-key abc123def456...`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAPIKey(args[0])
+	},
+}
+
+func runAPIKey(token string) error {
+	loadedCfg, err := config.Load()
+	if err != nil {
+		loadedCfg = &config.Config{
+			Host: "localhost",
+			Port: 4859,
+		}
+	}
+
+	loadedCfg.Token = token
+
+	if err := config.Save(loadedCfg); err != nil {
+		return err
+	}
+
+	color.Green("API key saved successfully!\n")
+	fmt.Println()
+	fmt.Println("You're ready to use homeyctl!")
+	fmt.Println("Try: homeyctl devices list")
+	return nil
+}
+
+var authStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show current authentication info",
+	Long:  `Display the current authentication method, token, and connection details.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAuthStatus()
+	},
+}
+
+func runAuthStatus() error {
+	loadedCfg, err := config.Load()
+	if err != nil {
+		fmt.Println("Authentication")
+		fmt.Println("==============")
+		fmt.Println("Status: Not configured")
+		fmt.Println()
+		fmt.Println("Run 'homeyctl auth' to get started.")
+		return nil
+	}
+
+	token := loadedCfg.EffectiveToken()
+	if token == "" {
+		fmt.Println("Authentication")
+		fmt.Println("==============")
+		fmt.Println("Status: Not configured")
+		fmt.Println()
+		fmt.Println("Run 'homeyctl auth' to get started.")
+		return nil
+	}
+
+	mode := loadedCfg.EffectiveMode()
+
+	fmt.Println("Authentication")
+	fmt.Println("==============")
+	fmt.Printf("Token:      %s\n", maskToken(token))
+	fmt.Printf("Connection: %s", mode)
+	if mode == "local" {
+		addr := loadedCfg.Local.Address
+		if addr == "" && loadedCfg.Host != "localhost" {
+			addr = loadedCfg.Host
+		}
+		if addr != "" {
+			fmt.Printf(" (%s)", addr)
+		}
+	}
+	fmt.Println()
+
+	return nil
+}
+
+// --- Token management subcommands ---
+
+var authTokenCmd = &cobra.Command{
 	Use:   "token",
 	Short: "Manage Personal Access Tokens (PAT)",
 	Long: `Create and manage scoped Personal Access Tokens for AI bots and integrations.
@@ -118,7 +376,7 @@ Note: Creating PATs requires an owner account with OAuth or password login.
 PAT tokens cannot be used to create new PATs.`,
 }
 
-var tokenListCmd = &cobra.Command{
+var authTokenListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all Personal Access Tokens",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -130,35 +388,35 @@ var tokenListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list tokens: %w", err)
 		}
 
-		if isTableFormat() {
-			var pats []PAT
-			if err := json.Unmarshal(data, &pats); err != nil {
-				return fmt.Errorf("failed to parse tokens: %w", err)
-			}
-
-			if len(pats) == 0 {
-				fmt.Println("No tokens found.")
-				return nil
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME\tSCOPES\tCREATED")
-			fmt.Fprintln(w, "--\t----\t------\t-------")
-			for _, p := range pats {
-				scopes := formatScopes(p.Scopes)
-				created := formatTime(p.CreatedAt)
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.ID, p.Name, scopes, created)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var pats []PAT
+		if err := json.Unmarshal(data, &pats); err != nil {
+			return fmt.Errorf("failed to parse tokens: %w", err)
+		}
+
+		if len(pats) == 0 {
+			fmt.Println("No tokens found.")
+			return nil
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("ID", "Name", "Scopes", "Created")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, p := range pats {
+			scopes := formatScopes(p.Scopes)
+			created := formatTime(p.CreatedAt)
+			tbl.AddRow(p.ID, p.Name, scopes, created)
+		}
+		tbl.Print()
 		return nil
 	},
 }
 
-var tokenCreateCmd = &cobra.Command{
+var authTokenCreateCmd = &cobra.Command{
 	Use:   "create <name>",
 	Short: "Create a new Personal Access Token",
 	Long: `Create a new scoped Personal Access Token.
@@ -168,7 +426,7 @@ By default, the created token is saved to your config for immediate use.
 
 Use --preset for common scope combinations:
   readonly  - Read-only access to devices, flows, zones, etc.
-  control   - Read + control devices and trigger flows
+  control   - Read + control devices and full flow access
   full      - Full access (same as owner)
 
 Or use --scopes for specific scopes:
@@ -177,9 +435,9 @@ Or use --scopes for specific scopes:
 Use --no-save to create a token without saving it (for external use).
 
 Examples:
-  homeyctl token create "AI Bot" --preset readonly
-  homeyctl token create "Home Assistant" --preset control
-  homeyctl token create "External" --preset readonly --no-save`,
+  homeyctl auth token create "AI Bot" --preset readonly
+  homeyctl auth token create "Home Assistant" --preset control
+  homeyctl auth token create "External" --preset readonly --no-save`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -278,7 +536,7 @@ Examples:
 				return fmt.Errorf("cannot create PAT: only the owner account can create tokens")
 			}
 			if strings.Contains(errStr, "Missing Scopes") {
-				return fmt.Errorf("cannot create PAT: the requested scopes are not available.\nTry a different preset or check available scopes with: homeyctl token scopes")
+				return fmt.Errorf("cannot create PAT: the requested scopes are not available.\nTry a different preset or check available scopes with: homeyctl auth token scopes")
 			}
 			return fmt.Errorf("failed to create token: %w", err)
 		}
@@ -289,7 +547,7 @@ Examples:
 		}
 
 		fmt.Println()
-		fmt.Println("Token created successfully!")
+		color.Green("Token created successfully!\n")
 		fmt.Printf("Name:   %s\n", resp.Name)
 		fmt.Printf("Scopes: %s\n", strings.Join(resp.Scopes, ", "))
 
@@ -302,11 +560,10 @@ Examples:
 		} else {
 			// Save the PAT to config
 			newCfg := &config.Config{
-				Host:   existingCfg.Host,
-				Port:   existingCfg.Port,
-				Token:  resp.Token,
-				Format: "json",
-				TLS:    existingCfg.TLS,
+				Host:  existingCfg.Host,
+				Port:  existingCfg.Port,
+				Token: resp.Token,
+				TLS:   existingCfg.TLS,
 			}
 
 			if err := config.Save(newCfg); err != nil {
@@ -314,7 +571,7 @@ Examples:
 				fmt.Println()
 				fmt.Printf("Token: %s\n", resp.Token)
 				fmt.Println()
-				return fmt.Errorf("token created but failed to save config: %w\nSave it manually with: homeyctl config set-token <token>", err)
+				return fmt.Errorf("token created but failed to save config: %w\nSave it manually with: homeyctl auth api-key <token>", err)
 			}
 
 			fmt.Println()
@@ -326,7 +583,7 @@ Examples:
 	},
 }
 
-var tokenDeleteCmd = &cobra.Command{
+var authTokenDeleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "Delete a Personal Access Token",
 	Args:  cobra.ExactArgs(1),
@@ -337,12 +594,12 @@ var tokenDeleteCmd = &cobra.Command{
 			return fmt.Errorf("failed to delete token: %w", err)
 		}
 
-		fmt.Printf("Token deleted: %s\n", id)
+		color.Green("Token deleted: %s\n", id)
 		return nil
 	},
 }
 
-var tokenScopesCmd = &cobra.Command{
+var authTokenScopesCmd = &cobra.Command{
 	Use:   "scopes",
 	Short: "List available scopes",
 	Long: `List all available scopes that can be used when creating tokens.
@@ -356,80 +613,13 @@ Scopes follow a hierarchy:
 		fmt.Println()
 		fmt.Println("PRESETS:")
 		fmt.Println("  readonly  - Read-only access to all resources")
-		fmt.Println("  control   - Read + control devices and trigger flows")
+		fmt.Println("  control   - Read + control devices, full flow access")
 		fmt.Println("  full      - Full access (same as owner)")
 		fmt.Println()
 		fmt.Println("INDIVIDUAL SCOPES:")
 		for _, scope := range availableScopes {
 			fmt.Printf("  %s\n", scope)
 		}
-	},
-}
-
-var tokenLoginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "Login with your Athom account to manage tokens",
-	Long: `Login with your Athom account using OAuth.
-
-This opens a browser where you can authenticate with your Athom account.
-After successful login, your Homey will be configured automatically.
-
-This is required to create, list, or delete Personal Access Tokens (PATs).
-PAT tokens themselves cannot manage other PATs - you need OAuth login.
-
-Example:
-  homeyctl token login
-  homeyctl token create "AI Bot" --preset readonly`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		homey, err := oauth.Login()
-		if err != nil {
-			return fmt.Errorf("login failed: %w", err)
-		}
-
-		// Determine which URL to use (prefer local secure, then local, then remote)
-		homeyURL := homey.LocalURLSecure
-		if homeyURL == "" {
-			homeyURL = homey.LocalURL
-		}
-		if homeyURL == "" {
-			homeyURL = homey.RemoteURL
-		}
-
-		// Parse URL to extract host and port
-		parsedURL, err := url.Parse(homeyURL)
-		if err != nil {
-			return fmt.Errorf("failed to parse Homey URL: %w", err)
-		}
-
-		host := parsedURL.Hostname()
-		port := 443
-		if parsedURL.Port() != "" {
-			fmt.Sscanf(parsedURL.Port(), "%d", &port)
-		} else if parsedURL.Scheme == "http" {
-			port = 80
-		}
-
-		// Save the configuration
-		newCfg := &config.Config{
-			Host:   host,
-			Port:   port,
-			Token:  homey.Token,
-			Format: "json",
-			TLS:    parsedURL.Scheme == "https",
-		}
-
-		if err := config.Save(newCfg); err != nil {
-			return fmt.Errorf("failed to save config: %w", err)
-		}
-
-		fmt.Println()
-		fmt.Printf("Successfully logged in!\n")
-		fmt.Printf("Homey: %s\n", homey.Name)
-		fmt.Printf("URL:   %s\n", homeyURL)
-		fmt.Println()
-		fmt.Println("You can now use 'homeyctl token create' to create scoped tokens.")
-
-		return nil
 	},
 }
 
@@ -455,14 +645,17 @@ func formatTime(timeStr string) string {
 }
 
 func init() {
-	rootCmd.AddCommand(tokenCmd)
-	tokenCmd.AddCommand(tokenLoginCmd)
-	tokenCmd.AddCommand(tokenListCmd)
-	tokenCmd.AddCommand(tokenCreateCmd)
-	tokenCmd.AddCommand(tokenDeleteCmd)
-	tokenCmd.AddCommand(tokenScopesCmd)
+	rootCmd.AddCommand(authCmd)
+	authCmd.AddCommand(authLoginCmd)
+	authCmd.AddCommand(authAPIKeyCmd)
+	authCmd.AddCommand(authStatusCmd)
+	authCmd.AddCommand(authTokenCmd)
+	authTokenCmd.AddCommand(authTokenListCmd)
+	authTokenCmd.AddCommand(authTokenCreateCmd)
+	authTokenCmd.AddCommand(authTokenDeleteCmd)
+	authTokenCmd.AddCommand(authTokenScopesCmd)
 
-	tokenCreateCmd.Flags().String("preset", "", "Scope preset: readonly, control, or full")
-	tokenCreateCmd.Flags().String("scopes", "", "Comma-separated list of scopes")
-	tokenCreateCmd.Flags().Bool("no-save", false, "Don't save token to config (for external use)")
+	authTokenCreateCmd.Flags().String("preset", "", "Scope preset: readonly, control, or full")
+	authTokenCreateCmd.Flags().String("scopes", "", "Comma-separated list of scopes")
+	authTokenCreateCmd.Flags().Bool("no-save", false, "Don't save token to config (for external use)")
 }

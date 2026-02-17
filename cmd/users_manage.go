@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -46,27 +46,27 @@ var usersGetCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var u struct {
-				ID      string `json:"id"`
-				Name    string `json:"name"`
-				Role    string `json:"role"`
-				Enabled bool   `json:"enabled"`
-				AthomID string `json:"athomId"`
-			}
-			if err := json.Unmarshal(data, &u); err != nil {
-				return err
-			}
-
-			fmt.Printf("Name:    %s\n", u.Name)
-			fmt.Printf("ID:      %s\n", u.ID)
-			fmt.Printf("Role:    %s\n", u.Role)
-			fmt.Printf("Enabled: %v\n", u.Enabled)
-			fmt.Printf("AthomID: %s\n", u.AthomID)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var u struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Role    string `json:"role"`
+			Enabled bool   `json:"enabled"`
+			AthomID string `json:"athomId"`
+		}
+		if err := json.Unmarshal(data, &u); err != nil {
+			return err
+		}
+
+		color.New(color.Bold).Println(u.Name)
+		fmt.Printf("  ID:      %s\n", u.ID)
+		fmt.Printf("  Role:    %s\n", u.Role)
+		fmt.Printf("  Enabled: %v\n", u.Enabled)
+		fmt.Printf("  AthomID: %s\n", u.AthomID)
 		return nil
 	},
 }
@@ -80,25 +80,25 @@ var usersMeCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var u struct {
-				ID      string `json:"id"`
-				Name    string `json:"name"`
-				Role    string `json:"role"`
-				Enabled bool   `json:"enabled"`
-			}
-			if err := json.Unmarshal(data, &u); err != nil {
-				return err
-			}
-
-			fmt.Printf("Name:    %s\n", u.Name)
-			fmt.Printf("ID:      %s\n", u.ID)
-			fmt.Printf("Role:    %s\n", u.Role)
-			fmt.Printf("Enabled: %v\n", u.Enabled)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var u struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Role    string `json:"role"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := json.Unmarshal(data, &u); err != nil {
+			return err
+		}
+
+		color.New(color.Bold).Println(u.Name)
+		fmt.Printf("  ID:      %s\n", u.ID)
+		fmt.Printf("  Role:    %s\n", u.Role)
+		fmt.Printf("  Enabled: %v\n", u.Enabled)
 		return nil
 	},
 }
@@ -143,12 +143,12 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Created user with role: %s\n", role)
+		if isJSON() {
+			outputJSON(result)
 			return nil
 		}
 
-		outputJSON(result)
+		color.Green("Created user with role: %s\n", role)
 		return nil
 	},
 }
@@ -187,7 +187,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Updated user: %s\n", user.Name)
+		color.Green("Updated user: %s\n", user.Name)
 		return nil
 	},
 }
@@ -206,7 +206,7 @@ var usersDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted user: %s\n", user.Name)
+		color.Green("Deleted user: %s\n", user.Name)
 		return nil
 	},
 }
@@ -225,13 +225,10 @@ var usersPresenceCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse users: %w", err)
 		}
 
-		if isTableFormat() {
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tPRESENT\tASLEEP\tID")
-			fmt.Fprintln(w, "----\t-------\t------\t--")
-
+		if isJSON() {
+			// JSON output - build presence map
+			presenceMap := make(map[string]interface{})
 			for _, u := range users {
-				// Get presence status
 				presentData, _ := apiClient.GetPresent(u.ID)
 				asleepData, _ := apiClient.GetAsleep(u.ID)
 
@@ -241,24 +238,24 @@ var usersPresenceCmd = &cobra.Command{
 				json.Unmarshal(presentData, &present)
 				json.Unmarshal(asleepData, &asleep)
 
-				presentStr := "no"
-				if present.Value {
-					presentStr = "yes"
+				presenceMap[u.ID] = map[string]interface{}{
+					"name":    u.Name,
+					"present": present.Value,
+					"asleep":  asleep.Value,
 				}
-				asleepStr := "no"
-				if asleep.Value {
-					asleepStr = "yes"
-				}
-
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Name, presentStr, asleepStr, u.ID)
 			}
-			w.Flush()
+
+			out, _ := json.MarshalIndent(presenceMap, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		// JSON output - build presence map
-		presenceMap := make(map[string]interface{})
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Present", "Asleep", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+
 		for _, u := range users {
+			// Get presence status
 			presentData, _ := apiClient.GetPresent(u.ID)
 			asleepData, _ := apiClient.GetAsleep(u.ID)
 
@@ -268,15 +265,18 @@ var usersPresenceCmd = &cobra.Command{
 			json.Unmarshal(presentData, &present)
 			json.Unmarshal(asleepData, &asleep)
 
-			presenceMap[u.ID] = map[string]interface{}{
-				"name":    u.Name,
-				"present": present.Value,
-				"asleep":  asleep.Value,
+			presentStr := "no"
+			if present.Value {
+				presentStr = "yes"
 			}
-		}
+			asleepStr := "no"
+			if asleep.Value {
+				asleepStr = "yes"
+			}
 
-		out, _ := json.MarshalIndent(presenceMap, "", "  ")
-		fmt.Println(string(out))
+			tbl.AddRow(u.Name, presentStr, asleepStr, u.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }

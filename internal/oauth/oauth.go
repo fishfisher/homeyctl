@@ -216,7 +216,7 @@ func Login() (*Homey, error) {
 				sessionToken, loginErr = loginToHomey(localURL, tokenResp.AccessToken)
 			}
 			if loginErr != nil {
-				return nil, fmt.Errorf("could not authenticate with Homey.\n\nThe OAuth login flow requires the delegation API which may not be available for your account.\n\nAlternative: Create an API key manually via the web UI:\n  1. Go to %s\n  2. Navigate to Settings → API Keys\n  3. Create a new API key with the scopes you need\n  4. Run: homeyctl config set-token <your-token>", localURL)
+				return nil, fmt.Errorf("could not authenticate with Homey.\n\nThe OAuth login flow requires the delegation API which may not be available for your account.\n\nAlternative: Create an API key manually via the web UI:\n  1. Go to %s\n  2. Navigate to Settings → API Keys\n  3. Create a new API key with the scopes you need\n  4. Run: homeyctl auth api-key <your-token>", localURL)
 			}
 		}
 		selectedHomey.Token = sessionToken

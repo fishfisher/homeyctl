@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -53,28 +54,28 @@ var dashboardsListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var dashboards map[string]Dashboard
-			if err := json.Unmarshal(data, &dashboards); err != nil {
-				return fmt.Errorf("failed to parse dashboards: %w", err)
-			}
-
-			if len(dashboards) == 0 {
-				fmt.Println("No dashboards found.")
-				return nil
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tCOLUMNS\tID")
-			fmt.Fprintln(w, "----\t-------\t--")
-			for _, d := range dashboards {
-				fmt.Fprintf(w, "%s\t%d\t%s\n", d.Name, len(d.Columns), d.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var dashboards map[string]Dashboard
+		if err := json.Unmarshal(data, &dashboards); err != nil {
+			return fmt.Errorf("failed to parse dashboards: %w", err)
+		}
+
+		if len(dashboards) == 0 {
+			fmt.Println("No dashboards found.")
+			return nil
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Columns", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, d := range dashboards {
+			tbl.AddRow(d.Name, len(d.Columns), d.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -145,12 +146,12 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Created dashboard: %s\n", name)
+		if isJSON() {
+			outputJSON(result)
 			return nil
 		}
 
-		outputJSON(result)
+		color.Green("Created dashboard: %s\n", name)
 		return nil
 	},
 }
@@ -185,7 +186,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Updated dashboard: %s\n", dashboard.Name)
+		color.Green("Updated dashboard: %s\n", dashboard.Name)
 		return nil
 	},
 }
@@ -204,7 +205,7 @@ var dashboardsDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted dashboard: %s\n", dashboard.Name)
+		color.Green("Deleted dashboard: %s\n", dashboard.Name)
 		return nil
 	},
 }

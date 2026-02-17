@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -54,31 +54,31 @@ var appsListCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var apps map[string]App
-			if err := json.Unmarshal(data, &apps); err != nil {
-				return fmt.Errorf("failed to parse apps: %w", err)
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tVERSION\tENABLED\tREADY\tID")
-			fmt.Fprintln(w, "----\t-------\t-------\t-----\t--")
-			for _, a := range apps {
-				enabled := "yes"
-				if !a.Enabled {
-					enabled = "no"
-				}
-				ready := "yes"
-				if !a.Ready {
-					ready = "no"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.Name, a.Version, enabled, ready, a.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var apps map[string]App
+		if err := json.Unmarshal(data, &apps); err != nil {
+			return fmt.Errorf("failed to parse apps: %w", err)
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Version", "Enabled", "Ready", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, a := range apps {
+			enabled := "yes"
+			if !a.Enabled {
+				enabled = "no"
+			}
+			ready := "yes"
+			if !a.Ready {
+				ready = "no"
+			}
+			tbl.AddRow(a.Name, a.Version, enabled, ready, a.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -118,6 +118,12 @@ var appsGetCmd = &cobra.Command{
 			return err
 		}
 
+		if isJSON() {
+			outputJSON(appData)
+			return nil
+		}
+
+		// App get shows full JSON detail by default (complex nested data)
 		outputJSON(appData)
 		return nil
 	},
@@ -157,7 +163,7 @@ var appsRestartCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Restarted app: %s\n", app.Name)
+		color.Green("Restarted app: %s\n", app.Name)
 		return nil
 	},
 }

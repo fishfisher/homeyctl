@@ -628,6 +628,18 @@ func (c *Client) GetWeatherForecast() (json.RawMessage, error) {
 	return c.doRequest("GET", "/api/manager/weather/forecast/hourly", nil)
 }
 
+// Flow card autocomplete
+
+func (c *Client) GetFlowCardAutocomplete(cardType, uri, id, argName, query string) (json.RawMessage, error) {
+	encodedURI := url.PathEscape(uri)
+	encodedID := url.PathEscape(id)
+	path := fmt.Sprintf("/api/manager/flow/%s/%s/%s/autocomplete?name=%s&query=%s",
+		cardType, encodedURI, encodedID,
+		url.QueryEscape(argName),
+		url.QueryEscape(query))
+	return c.doRequest("GET", path, nil)
+}
+
 // Energy (extended)
 
 func (c *Client) GetEnergyReportYear(year string) (json.RawMessage, error) {

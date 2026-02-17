@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/fishfisher/homeyctl/internal/config"
 	"github.com/fishfisher/homeyctl/internal/discovery"
 	"github.com/spf13/cobra"
@@ -36,13 +37,7 @@ var configShowCmd = &cobra.Command{
 			return err
 		}
 
-		// Check format flag directly since cfg may not be set for config commands
-		format := formatFlag
-		if format == "" {
-			format = loadedCfg.Format
-		}
-
-		if format != "table" {
+		if isJSON() {
 			output := map[string]interface{}{
 				"mode":          loadedCfg.Mode,
 				"effectiveMode": loadedCfg.EffectiveMode(),
@@ -103,40 +98,6 @@ var configShowCmd = &cobra.Command{
 	},
 }
 
-var configSetTokenCmd = &cobra.Command{
-	Use:   "set-token <token>",
-	Short: "Set API token",
-	Long: `Set the API token for authenticating with your Homey.
-
-To create a new API key:
-  1. Go to https://my.homey.app/
-  2. Select your Homey
-  3. Click Settings (gear icon, bottom left)
-  4. Click API Keys
-  5. Click "+ New API Key"
-  6. Copy the generated token and use it here`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
-		if err != nil {
-			cfg = &config.Config{
-				Host:   "localhost",
-				Port:   4859,
-				Format: "table",
-			}
-		}
-
-		cfg.Token = args[0]
-
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-
-		fmt.Println("Token saved successfully")
-		return nil
-	},
-}
-
 var configSetHostCmd = &cobra.Command{
 	Use:   "set-host <host>",
 	Short: "Set Homey host",
@@ -151,8 +112,7 @@ To find your Homey's IP address:
 		cfg, err := config.Load()
 		if err != nil {
 			cfg = &config.Config{
-				Port:   4859,
-				Format: "table",
+				Port: 4859,
 			}
 		}
 
@@ -162,7 +122,7 @@ To find your Homey's IP address:
 			return err
 		}
 
-		fmt.Printf("Host set to: %s\n", cfg.Host)
+		color.Green("Host set to: %s\n", cfg.Host)
 		return nil
 	},
 }
@@ -199,7 +159,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Mode set to: %s\n", mode)
+		color.Green("Mode set to: %s\n", mode)
 		return nil
 	},
 }
@@ -232,8 +192,8 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Local address set to: %s\n", address)
-		fmt.Println("Local token saved")
+		color.Green("Local address set to: %s\n", address)
+		color.Green("Local token saved\n")
 		return nil
 	},
 }
@@ -263,7 +223,7 @@ Examples:
 			return err
 		}
 
-		fmt.Println("Cloud token saved")
+		color.Green("Cloud token saved\n")
 		return nil
 	},
 }
@@ -288,29 +248,12 @@ Examples:
 		ctx, cancel := context.WithTimeout(context.Background(), timeout+2*time.Second)
 		defer cancel()
 
-		// Load config to check format (config commands skip PersistentPreRunE)
-		loadedCfg, err := config.Load()
-		if err != nil {
-			loadedCfg = &config.Config{Format: "json"}
-		}
+		if isJSON() {
+			candidates, err := discovery.DiscoverAndVerify(ctx, timeout)
+			if err != nil {
+				return fmt.Errorf("discovery failed: %w", err)
+			}
 
-		format := formatFlag
-		if format == "" {
-			format = loadedCfg.Format
-		}
-		useTable := format == "table"
-
-		if useTable {
-			fmt.Printf("Searching for Homey devices (timeout: %ds)...\n", discoverTimeout)
-		}
-
-		candidates, err := discovery.DiscoverAndVerify(ctx, timeout)
-		if err != nil {
-			return fmt.Errorf("discovery failed: %w", err)
-		}
-
-		// JSON output (default)
-		if !useTable {
 			result := make([]map[string]interface{}, len(candidates))
 			for i, c := range candidates {
 				result[i] = map[string]interface{}{
@@ -325,7 +268,13 @@ Examples:
 			return nil
 		}
 
-		// Table output for humans
+		fmt.Printf("Searching for Homey devices (timeout: %ds)...\n", discoverTimeout)
+
+		candidates, err := discovery.DiscoverAndVerify(ctx, timeout)
+		if err != nil {
+			return fmt.Errorf("discovery failed: %w", err)
+		}
+
 		if len(candidates) == 0 {
 			fmt.Println("\nNo Homey devices found.")
 			fmt.Println("\nTips:")
@@ -354,7 +303,6 @@ Examples:
 func init() {
 	rootCmd.AddCommand(configCmd)
 	configCmd.AddCommand(configShowCmd)
-	configCmd.AddCommand(configSetTokenCmd)
 	configCmd.AddCommand(configSetHostCmd)
 	configCmd.AddCommand(configSetModeCmd)
 	configCmd.AddCommand(configSetLocalCmd)

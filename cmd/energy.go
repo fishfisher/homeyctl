@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -25,46 +25,46 @@ var energyLiveCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var report struct {
-				ZoneName       string               `json:"zoneName"`
-				TotalConsumed  struct{ W *float64 } `json:"totalConsumed"`
-				TotalGenerated struct{ W *float64 } `json:"totalGenerated"`
-				Items          []struct {
-					Type   string  `json:"type"`
-					ID     string  `json:"id"`
-					Name   *string `json:"name"`
-					Values struct {
-						W *float64 `json:"W"`
-					} `json:"values"`
-				} `json:"items"`
-			}
-			if err := json.Unmarshal(data, &report); err != nil {
-				return fmt.Errorf("failed to parse energy data: %w", err)
-			}
-
-			fmt.Printf("Zone: %s\n", report.ZoneName)
-			if report.TotalConsumed.W != nil {
-				fmt.Printf("Total consumed: %.1f W\n", *report.TotalConsumed.W)
-			}
-			if report.TotalGenerated.W != nil && *report.TotalGenerated.W > 0 {
-				fmt.Printf("Total generated: %.1f W\n", *report.TotalGenerated.W)
-			}
-			fmt.Println()
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "DEVICE\tPOWER (W)")
-			fmt.Fprintln(w, "------\t---------")
-			for _, item := range report.Items {
-				if item.Type == "device" && item.Name != nil && item.Values.W != nil {
-					fmt.Fprintf(w, "%s\t%.1f\n", *item.Name, *item.Values.W)
-				}
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var report struct {
+			ZoneName       string               `json:"zoneName"`
+			TotalConsumed  struct{ W *float64 } `json:"totalConsumed"`
+			TotalGenerated struct{ W *float64 } `json:"totalGenerated"`
+			Items          []struct {
+				Type   string  `json:"type"`
+				ID     string  `json:"id"`
+				Name   *string `json:"name"`
+				Values struct {
+					W *float64 `json:"W"`
+				} `json:"values"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(data, &report); err != nil {
+			return fmt.Errorf("failed to parse energy data: %w", err)
+		}
+
+		color.New(color.Bold).Printf("Zone: %s\n", report.ZoneName)
+		if report.TotalConsumed.W != nil {
+			fmt.Printf("Total consumed: %.1f W\n", *report.TotalConsumed.W)
+		}
+		if report.TotalGenerated.W != nil && *report.TotalGenerated.W > 0 {
+			fmt.Printf("Total generated: %.1f W\n", *report.TotalGenerated.W)
+		}
+		fmt.Println()
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Device", "Power (W)")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, item := range report.Items {
+			if item.Type == "device" && item.Name != nil && item.Values.W != nil {
+				tbl.AddRow(*item.Name, fmt.Sprintf("%.1f", *item.Values.W))
+			}
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -124,12 +124,12 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			return printEnergyReportTable(data, period, date)
+		if isJSON() {
+			outputJSON(data)
+			return nil
 		}
 
-		outputJSON(data)
-		return nil
+		return printEnergyReportTable(data, period, date)
 	},
 }
 
@@ -158,7 +158,7 @@ func printEnergyReportTable(data json.RawMessage, period, date string) error {
 		return nil
 	}
 
-	fmt.Printf("Energy Report: %s (%s)\n", report.Date, period)
+	color.New(color.Bold).Printf("Energy Report: %s (%s)\n", report.Date, period)
 	fmt.Println()
 
 	if report.Electricity.ConsumedPeriod != nil {
@@ -171,12 +171,14 @@ func printEnergyReportTable(data json.RawMessage, period, date string) error {
 		fmt.Printf("Total generated: %.2f kWh\n", *report.Electricity.GeneratedPeriod)
 	}
 
+	headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+
 	// Show consumed devices
 	if len(report.Electricity.Devices.Consumed) > 0 {
-		fmt.Println("\nDevices:")
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "  DEVICE\tPERIOD\tTOTAL")
-		fmt.Fprintln(w, "  ------\t------\t-----")
+		fmt.Println()
+		color.New(color.Bold).Println("Devices:")
+		tbl := table.New("Device", "Period", "Total")
+		tbl.WithHeaderFormatter(headerFmt)
 		for _, d := range report.Electricity.Devices.Consumed {
 			periodStr := "-"
 			totalStr := "-"
@@ -186,17 +188,17 @@ func printEnergyReportTable(data json.RawMessage, period, date string) error {
 			if d.Total != nil {
 				totalStr = fmt.Sprintf("%.2f kWh", *d.Total)
 			}
-			fmt.Fprintf(w, "  %s\t%s\t%s\n", d.Name, periodStr, totalStr)
+			tbl.AddRow(d.Name, periodStr, totalStr)
 		}
-		w.Flush()
+		tbl.Print()
 	}
 
 	// Show EV chargers separately if present
 	if len(report.Electricity.Devices.EVChargerCharged) > 0 {
-		fmt.Println("\nEV Chargers:")
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "  CHARGER\tPERIOD\tTOTAL")
-		fmt.Fprintln(w, "  -------\t------\t-----")
+		fmt.Println()
+		color.New(color.Bold).Println("EV Chargers:")
+		tbl := table.New("Charger", "Period", "Total")
+		tbl.WithHeaderFormatter(headerFmt)
 		for _, d := range report.Electricity.Devices.EVChargerCharged {
 			periodStr := "-"
 			totalStr := "-"
@@ -206,9 +208,9 @@ func printEnergyReportTable(data json.RawMessage, period, date string) error {
 			if d.Total != nil {
 				totalStr = fmt.Sprintf("%.2f kWh", *d.Total)
 			}
-			fmt.Fprintf(w, "  %s\t%s\t%s\n", d.Name, periodStr, totalStr)
+			tbl.AddRow(d.Name, periodStr, totalStr)
 		}
-		w.Flush()
+		tbl.Print()
 	}
 
 	return nil
@@ -234,34 +236,34 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			var report struct {
-				Date        string `json:"date"`
-				Electricity struct {
-					ConsumedPeriod  *float64 `json:"consumedPeriod"`
-					GeneratedPeriod *float64 `json:"generatedPeriod"`
-					ImportedPeriod  *float64 `json:"importedPeriod"`
-				} `json:"electricity"`
-			}
-			if err := json.Unmarshal(data, &report); err != nil {
-				outputJSON(data)
-				return nil
-			}
-
-			fmt.Printf("Energy Report: Year %s\n\n", year)
-			if report.Electricity.ConsumedPeriod != nil {
-				fmt.Printf("Total consumed: %.2f kWh\n", *report.Electricity.ConsumedPeriod)
-			}
-			if report.Electricity.ImportedPeriod != nil {
-				fmt.Printf("Total imported: %.2f kWh\n", *report.Electricity.ImportedPeriod)
-			}
-			if report.Electricity.GeneratedPeriod != nil && *report.Electricity.GeneratedPeriod > 0 {
-				fmt.Printf("Total generated: %.2f kWh\n", *report.Electricity.GeneratedPeriod)
-			}
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var report struct {
+			Date        string `json:"date"`
+			Electricity struct {
+				ConsumedPeriod  *float64 `json:"consumedPeriod"`
+				GeneratedPeriod *float64 `json:"generatedPeriod"`
+				ImportedPeriod  *float64 `json:"importedPeriod"`
+			} `json:"electricity"`
+		}
+		if err := json.Unmarshal(data, &report); err != nil {
+			outputJSON(data)
+			return nil
+		}
+
+		color.New(color.Bold).Printf("Energy Report: Year %s\n\n", year)
+		if report.Electricity.ConsumedPeriod != nil {
+			fmt.Printf("Total consumed: %.2f kWh\n", *report.Electricity.ConsumedPeriod)
+		}
+		if report.Electricity.ImportedPeriod != nil {
+			fmt.Printf("Total imported: %.2f kWh\n", *report.Electricity.ImportedPeriod)
+		}
+		if report.Electricity.GeneratedPeriod != nil && *report.Electricity.GeneratedPeriod > 0 {
+			fmt.Printf("Total generated: %.2f kWh\n", *report.Electricity.GeneratedPeriod)
+		}
 		return nil
 	},
 }
@@ -285,7 +287,7 @@ Example:
 			return err
 		}
 
-		fmt.Println("Deleted all energy reports")
+		color.Green("Deleted all energy reports")
 		return nil
 	},
 }
@@ -299,17 +301,17 @@ var energyCurrencyCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var currency string
-			if err := json.Unmarshal(data, &currency); err != nil {
-				outputJSON(data)
-				return nil
-			}
-			fmt.Printf("Energy currency: %s\n", currency)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var currency string
+		if err := json.Unmarshal(data, &currency); err != nil {
+			outputJSON(data)
+			return nil
+		}
+		fmt.Printf("Energy currency: %s\n", currency)
 		return nil
 	},
 }
@@ -324,44 +326,43 @@ var energyPriceCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var prices struct {
-				PriceUnit         string `json:"priceUnit"`
-				PricesPerInterval []struct {
-					PeriodStart string  `json:"periodStart"`
-					PeriodEnd   string  `json:"periodEnd"`
-					Value       float64 `json:"value"`
-				} `json:"pricesPerInterval"`
-			}
-			if err := json.Unmarshal(data, &prices); err != nil {
-				outputJSON(data)
-				return nil
-			}
-
-			now := time.Now()
-			fmt.Printf("Electricity prices for %s (%s)\n\n", date, prices.PriceUnit)
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "TIME\tPRICE")
-			fmt.Fprintln(w, "----\t-----")
-			for _, p := range prices.PricesPerInterval {
-				start, _ := time.Parse(time.RFC3339, p.PeriodStart)
-				end, _ := time.Parse(time.RFC3339, p.PeriodEnd)
-				marker := ""
-				if now.After(start) && now.Before(end) {
-					marker = " <-- now"
-				}
-				fmt.Fprintf(w, "%s-%s\t%.2f%s\n",
-					start.Local().Format("15:04"),
-					end.Local().Format("15:04"),
-					p.Value,
-					marker)
-			}
-			w.Flush()
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var prices struct {
+			PriceUnit         string `json:"priceUnit"`
+			PricesPerInterval []struct {
+				PeriodStart string  `json:"periodStart"`
+				PeriodEnd   string  `json:"periodEnd"`
+				Value       float64 `json:"value"`
+			} `json:"pricesPerInterval"`
+		}
+		if err := json.Unmarshal(data, &prices); err != nil {
+			outputJSON(data)
+			return nil
+		}
+
+		now := time.Now()
+		color.New(color.Bold).Printf("Electricity prices for %s (%s)\n\n", date, prices.PriceUnit)
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Time", "Price")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, p := range prices.PricesPerInterval {
+			start, _ := time.Parse(time.RFC3339, p.PeriodStart)
+			end, _ := time.Parse(time.RFC3339, p.PeriodEnd)
+			marker := ""
+			if now.After(start) && now.Before(end) {
+				marker = " <-- now"
+			}
+			tbl.AddRow(
+				fmt.Sprintf("%s-%s", start.Local().Format("15:04"), end.Local().Format("15:04")),
+				fmt.Sprintf("%.2f%s", p.Value, marker),
+			)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -402,7 +403,7 @@ Examples:
 			return fmt.Errorf("price saved but failed to set price type to fixed: %w", err)
 		}
 
-		fmt.Printf("Set fixed electricity price: %.2f NOK/kWh\n", price)
+		color.Green("Set fixed electricity price: %.2f NOK/kWh\n", price)
 		return nil
 	},
 }
@@ -466,7 +467,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Set electricity price type: %s\n", priceType)
+		color.Green("Set electricity price type: %s\n", priceType)
 		return nil
 	},
 }

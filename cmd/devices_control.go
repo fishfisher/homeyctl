@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +51,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Set %s.%s = %v\n", device.Name, capability, value)
+		color.Green("Set %s.%s = %v\n", device.Name, capability, value)
 		return nil
 	},
 }
@@ -102,7 +103,7 @@ func setDeviceOnOff(nameOrID string, on bool) error {
 	if !on {
 		state = "off"
 	}
-	fmt.Printf("Turned %s %s\n", device.Name, state)
+	color.Green("Turned %s %s\n", device.Name, state)
 	return nil
 }
 

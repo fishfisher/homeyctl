@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -36,24 +37,25 @@ var systemInfoCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var info SystemInfo
-			if err := json.Unmarshal(data, &info); err != nil {
-				return fmt.Errorf("failed to parse system info: %w", err)
-			}
-
-			fmt.Printf("Homey Version:    %s\n", info.HomeyVersion)
-			fmt.Printf("Model:            %s (%s)\n", info.HomeyModelName, info.HomeyModelID)
-			fmt.Printf("Platform Version: %v\n", info.HomeyPlatformVersion)
-			fmt.Printf("Address:          %s\n", info.Address)
-			fmt.Printf("Country:          %s\n", info.Country)
-			fmt.Printf("Boot Date:        %s\n", info.BootDate)
-			fmt.Printf("Uptime:           %.0f seconds\n", info.Uptime)
-			fmt.Printf("Cloud Connected:  %v\n", info.CloudConnected)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var info SystemInfo
+		if err := json.Unmarshal(data, &info); err != nil {
+			return fmt.Errorf("failed to parse system info: %w", err)
+		}
+
+		color.New(color.Bold).Println("System Information")
+		fmt.Printf("  Homey Version:    %s\n", info.HomeyVersion)
+		fmt.Printf("  Model:            %s (%s)\n", info.HomeyModelName, info.HomeyModelID)
+		fmt.Printf("  Platform Version: %v\n", info.HomeyPlatformVersion)
+		fmt.Printf("  Address:          %s\n", info.Address)
+		fmt.Printf("  Country:          %s\n", info.Country)
+		fmt.Printf("  Boot Date:        %s\n", info.BootDate)
+		fmt.Printf("  Uptime:           %.0f seconds\n", info.Uptime)
+		fmt.Printf("  Cloud Connected:  %v\n", info.CloudConnected)
 		return nil
 	},
 }
@@ -71,7 +73,7 @@ var systemRebootCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Println("Reboot initiated")
+		color.Green("Reboot initiated\n")
 		return nil
 	},
 }
@@ -118,16 +120,16 @@ var systemNameGetCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var name string
-			if err := json.Unmarshal(data, &name); err != nil {
-				return err
-			}
-			fmt.Printf("Homey name: %s\n", name)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var name string
+		if err := json.Unmarshal(data, &name); err != nil {
+			return err
+		}
+		fmt.Printf("Homey name: %s\n", name)
 		return nil
 	},
 }
@@ -143,7 +145,7 @@ var systemNameSetCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Set Homey name to: %s\n", name)
+		color.Green("Set Homey name to: %s\n", name)
 		return nil
 	},
 }

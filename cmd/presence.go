@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -66,29 +67,29 @@ Examples:
 		json.Unmarshal(presentData, &present)
 		json.Unmarshal(asleepData, &asleep)
 
-		if isTableFormat() {
-			presentStr := "away"
-			if present.Value {
-				presentStr = "home"
+		if isJSON() {
+			result := map[string]interface{}{
+				"user":    userName,
+				"present": present.Value,
+				"asleep":  asleep.Value,
 			}
-			asleepStr := "awake"
-			if asleep.Value {
-				asleepStr = "asleep"
-			}
-
-			fmt.Printf("User:    %s\n", userName)
-			fmt.Printf("Present: %s\n", presentStr)
-			fmt.Printf("Asleep:  %s\n", asleepStr)
+			out, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		result := map[string]interface{}{
-			"user":    userName,
-			"present": present.Value,
-			"asleep":  asleep.Value,
+		presentStr := "away"
+		if present.Value {
+			presentStr = "home"
 		}
-		out, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(out))
+		asleepStr := "awake"
+		if asleep.Value {
+			asleepStr = "asleep"
+		}
+
+		color.New(color.Bold).Println(userName)
+		fmt.Printf("  Present: %s\n", presentStr)
+		fmt.Printf("  Asleep:  %s\n", asleepStr)
 		return nil
 	},
 }
@@ -138,7 +139,7 @@ Examples:
 		if present {
 			statusStr = "home"
 		}
-		fmt.Printf("Set %s presence to: %s\n", nameOrID, statusStr)
+		color.Green("Set %s presence to: %s\n", nameOrID, statusStr)
 		return nil
 	},
 }
@@ -189,16 +190,16 @@ var presenceAsleepGetCmd = &cobra.Command{
 		}
 		json.Unmarshal(data, &asleep)
 
-		if isTableFormat() {
-			status := "awake"
-			if asleep.Value {
-				status = "asleep"
-			}
-			fmt.Printf("%s is %s\n", userName, status)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		status := "awake"
+		if asleep.Value {
+			status = "asleep"
+		}
+		fmt.Printf("%s is %s\n", userName, status)
 		return nil
 	},
 }
@@ -248,7 +249,7 @@ Examples:
 		if asleep {
 			statusStr = "asleep"
 		}
-		fmt.Printf("Set %s sleep status to: %s\n", nameOrID, statusStr)
+		color.Green("Set %s sleep status to: %s\n", nameOrID, statusStr)
 		return nil
 	},
 }

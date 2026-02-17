@@ -42,7 +42,7 @@ This is a CLI tool for controlling Homey smart home devices via the local Homey 
 1. Create a new file in `cmd/` (e.g., `cmd/newresource.go`)
 2. Define the parent command and subcommands using Cobra
 3. Use `apiClient` (from root.go) for API calls
-4. Support both JSON and table output via `isTableFormat()` and `outputJSON()`
+4. Default output is human-readable (table/detail). Use `isJSON()` to check if `--json` flag was passed, and `outputJSON()` for JSON mode
 5. Register commands in `init()` by adding to `rootCmd`
 
 ### API Client Pattern
@@ -53,26 +53,30 @@ The client returns `json.RawMessage` for GET requests, allowing commands to pars
 
 Config is loaded in `PersistentPreRunE` on rootCmd. Commands that don't need API access (config, version, help, login, install-skill, create) skip loading. Environment variables prefixed with `HOMEY_` override config file values.
 
-### Authentication & OAuth
+### Authentication
 
-The CLI supports two authentication methods:
+All auth lives under `homeyctl auth`:
 
-1. **OAuth flow (recommended)**: `homeyctl login`
+1. **OAuth flow**: `homeyctl auth login`
    - Opens browser for Athom account login
-   - Creates a scoped Personal Access Token (PAT) with "control" preset
+   - Creates a scoped PAT with "control" preset (includes `homey.flow`)
    - Saves token to config automatically
    - OAuth client credentials are embedded in `internal/oauth/oauth.go`
 
-2. **Manual setup**: Create API key at my.homey.app, then `homeyctl config set-token`
+2. **API key (recommended for full access)**: `homeyctl auth api-key <key>`
+   - Create key at my.homey.app > Settings > API Keys
+   - Full access, no scope limitations
+
+3. **Interactive**: `homeyctl auth` presents a menu
 
 **Creating tokens for AI bots**:
 ```bash
-homeyctl token create "AI Bot" --preset readonly --no-save
+homeyctl auth token create "AI Bot" --preset readonly --no-save
 ```
 
 **Scoped token presets**:
 - `readonly` - Can only read devices, flows, zones, etc. (safe for AI)
-- `control` - Can read + control devices and trigger flows
+- `control` - Can read + control devices, full flow access (`homey.flow`)
 - `full` - Full access (same as owner)
 
 PATs cannot create other PATs - OAuth session required for token management.
@@ -94,8 +98,10 @@ Run `homeyctl install-skill` to install the embedded AI skill files to your AI t
 - Omitting a field keeps its existing value
 
 ### Output Format
-- All list commands return **flat JSON arrays** for easy parsing
-- Example: `homeyctl flows list | jq '.[] | select(.name | test("pult";"i"))'`
+- Default output is human-readable tables/detail views
+- Use `--json` flag for machine-readable JSON output
+- All list commands with `--json` return **flat JSON arrays** for easy parsing
+- Example: `homeyctl flows list --json | jq '.[] | select(.name | test("pult";"i"))'`
 
 ## Release Process
 

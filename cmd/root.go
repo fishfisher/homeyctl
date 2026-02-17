@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,7 +16,7 @@ var (
 	cfg       *config.Config
 	apiClient *client.Client
 
-	formatFlag string
+	jsonFlag bool
 
 	versionInfo struct {
 		Version string
@@ -33,16 +34,17 @@ func SetVersionInfo(version, commit, date string) {
 const setupInstructions = `
 Welcome to homeyctl! To get started, run:
 
-  homeyctl login
+  homeyctl auth
 
-This will open your browser to log in with your Athom account.
+This will guide you through authentication.
 
-After login, try:
+Or use a specific method:
+  homeyctl auth login            Log in via browser (OAuth)
+  homeyctl auth api-key <key>    Set API key from my.homey.app
+
+After setup, try:
   homeyctl devices list
   homeyctl flows list
-
-For AI bots (read-only access):
-  homeyctl token create "AI Bot" --preset readonly --no-save
 
 For more help: homeyctl --help
 `
@@ -64,13 +66,15 @@ var rootCmd = &cobra.Command{
 		cmd.Help()
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Skip config for config and version commands
+		// Skip config for config, auth, and version commands
 		cmdPath := cmd.CommandPath()
 		if cmd.Name() == "config" || cmd.Name() == "version" || cmd.Name() == "help" ||
-			cmd.Name() == "set-token" || cmd.Name() == "set-host" || cmd.Name() == "show" ||
-			cmd.Name() == "completion" || cmd.Name() == "scopes" ||
-			cmd.Name() == "login" || cmd.Name() == "install-skill" ||
-			cmdPath == "homeyctl token create" || cmdPath == "homeyctl" {
+			cmd.Name() == "set-host" || cmd.Name() == "show" ||
+			cmd.Name() == "completion" || cmd.Name() == "install-skill" ||
+			cmd.Name() == "auth" || cmd.Name() == "login" || cmd.Name() == "api-key" ||
+			cmd.Name() == "status" || cmd.Name() == "scopes" ||
+			strings.HasPrefix(cmdPath, "homeyctl auth") ||
+			cmdPath == "homeyctl" {
 			return nil
 		}
 
@@ -81,11 +85,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		if cfg.Token == "" {
-			return fmt.Errorf("no API token configured. Run: homeyctl config set-token <token>")
-		}
-
-		if formatFlag != "" {
-			cfg.Format = formatFlag
+			return fmt.Errorf("no API token configured. Run: homeyctl auth")
 		}
 
 		apiClient = client.New(cfg)
@@ -100,7 +100,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&formatFlag, "format", "", "Output format: json, table (default: json)")
+	rootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
 }
 
 // outputJSON pretty-prints JSON data
@@ -114,7 +114,7 @@ func outputJSON(data []byte) {
 	fmt.Println(string(data))
 }
 
-// isTableFormat returns true if table format is requested
-func isTableFormat() bool {
-	return cfg != nil && cfg.Format == "table"
+// isJSON returns true if JSON output is requested via --json flag
+func isJSON() bool {
+	return jsonFlag
 }

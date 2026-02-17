@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -14,17 +15,24 @@ func TestCommandSkipsConfigLoading(t *testing.T) {
 	}{
 		// Commands that SHOULD skip config loading
 		{"config command", "homeyctl config", "config", true},
-		{"config set-token", "homeyctl config set-token", "set-token", true},
 		{"config set-host", "homeyctl config set-host", "set-host", true},
 		{"config show", "homeyctl config show", "show", true},
 		{"version command", "homeyctl version", "version", true},
 		{"help command", "homeyctl help", "help", true},
 		{"completion command", "homeyctl completion", "completion", true},
-		{"login command", "homeyctl login", "login", true},
 		{"install-skill command", "homeyctl install-skill", "install-skill", true},
-		{"token create command", "homeyctl token create", "create", true},
-		{"token scopes command", "homeyctl token scopes", "scopes", true},
 		{"root command", "homeyctl", "homeyctl", true},
+
+		// Auth commands that should skip config loading
+		{"auth command", "homeyctl auth", "auth", true},
+		{"auth login", "homeyctl auth login", "login", true},
+		{"auth api-key", "homeyctl auth api-key", "api-key", true},
+		{"auth status", "homeyctl auth status", "status", true},
+		{"auth token", "homeyctl auth token", "token", true},
+		{"auth token create", "homeyctl auth token create", "create", true},
+		{"auth token scopes", "homeyctl auth token scopes", "scopes", true},
+		{"auth token list", "homeyctl auth token list", "list", true},
+		{"auth token delete", "homeyctl auth token delete", "delete", true},
 
 		// Commands that should NOT skip config loading (need API client)
 		// This is the key fix for GitHub issues #4 and #5
@@ -40,8 +48,6 @@ func TestCommandSkipsConfigLoading(t *testing.T) {
 		{"devices get command", "homeyctl devices get", "get", false},
 		{"devices set command", "homeyctl devices set", "set", false},
 		{"zones list command", "homeyctl zones list", "list", false},
-		{"token list command", "homeyctl token list", "list", false},
-		{"token delete command", "homeyctl token delete", "delete", false},
 	}
 
 	for _, tc := range skipCommands {
@@ -56,15 +62,15 @@ func TestCommandSkipsConfigLoading(t *testing.T) {
 }
 
 // TestFlowsCreateRequiresClient specifically tests the fix for GitHub issues #4 and #5
-// The bug was that cmd.Name() == "create" matched both "token create" and "flows create",
+// The bug was that cmd.Name() == "create" matched both "auth token create" and "flows create",
 // causing apiClient to be nil for flows create, resulting in a segmentation fault.
 func TestFlowsCreateRequiresClient(t *testing.T) {
-	// These two commands both have name "create" but only token create should skip
-	tokenCreate := shouldSkipConfigLoading("homeyctl token create", "create")
+	// These two commands both have name "create" but only auth token create should skip
+	tokenCreate := shouldSkipConfigLoading("homeyctl auth token create", "create")
 	flowsCreate := shouldSkipConfigLoading("homeyctl flows create", "create")
 
 	if !tokenCreate {
-		t.Error("token create should skip config loading (handles its own OAuth)")
+		t.Error("auth token create should skip config loading (handles its own OAuth)")
 	}
 	if flowsCreate {
 		t.Error("flows create should NOT skip config loading (needs apiClient)")
@@ -74,17 +80,13 @@ func TestFlowsCreateRequiresClient(t *testing.T) {
 // shouldSkipConfigLoading mirrors the logic in PersistentPreRunE
 // This allows us to test the logic without executing actual commands
 func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
-	// Skip config commands that don't need API client
 	if cmdName == "config" || cmdName == "version" || cmdName == "help" ||
-		cmdName == "set-token" || cmdName == "set-host" || cmdName == "show" ||
-		cmdName == "completion" || cmdName == "scopes" ||
-		cmdName == "login" || cmdName == "install-skill" || cmdPath == "homeyctl" {
-		return true
-	}
-
-	// Only skip create for "token create" (handles its own OAuth auth)
-	// NOT for "flows create" which needs the normal apiClient
-	if cmdPath == "homeyctl token create" {
+		cmdName == "set-host" || cmdName == "show" ||
+		cmdName == "completion" || cmdName == "install-skill" ||
+		cmdName == "auth" || cmdName == "login" || cmdName == "api-key" ||
+		cmdName == "status" || cmdName == "scopes" ||
+		strings.HasPrefix(cmdPath, "homeyctl auth") ||
+		cmdPath == "homeyctl" {
 		return true
 	}
 

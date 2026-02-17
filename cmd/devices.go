@@ -3,10 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -83,19 +83,19 @@ Examples:
 			}
 		}
 
-		if isTableFormat() {
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tCLASS\tID")
-			fmt.Fprintln(w, "----\t-----\t--")
-			for _, d := range filtered {
-				fmt.Fprintf(w, "%s\t%s\t%s\n", d.Name, d.Class, d.ID)
-			}
-			w.Flush()
+		if isJSON() {
+			out, _ := json.MarshalIndent(filtered, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		out, _ := json.MarshalIndent(filtered, "", "  ")
-		fmt.Println(string(out))
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Name", "Class", "ID")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, d := range filtered {
+			tbl.AddRow(d.Name, d.Class, d.ID)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -110,24 +110,24 @@ var devicesGetCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Name:  %s\n", device.Name)
-			fmt.Printf("Class: %s\n", device.Class)
-			fmt.Printf("ID:    %s\n", device.ID)
-			fmt.Println("\nCapabilities:")
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "  CAPABILITY\tVALUE")
-			fmt.Fprintln(w, "  ----------\t-----")
-			for _, cap := range device.CapabilitiesObj {
-				fmt.Fprintf(w, "  %s\t%v\n", cap.ID, cap.Value)
-			}
-			w.Flush()
+		if isJSON() {
+			out, _ := json.MarshalIndent(device, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		out, _ := json.MarshalIndent(device, "", "  ")
-		fmt.Println(string(out))
+		color.New(color.Bold).Println(device.Name)
+		fmt.Printf("  Class: %s\n", device.Class)
+		fmt.Printf("  ID:    %s\n", device.ID)
+		fmt.Println("\n  Capabilities:")
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Capability", "Value")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, cap := range device.CapabilitiesObj {
+			tbl.AddRow(cap.ID, cap.Value)
+		}
+		tbl.Print()
 		return nil
 	},
 }
@@ -149,29 +149,29 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Values for %s:\n\n", device.Name)
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "CAPABILITY\tVALUE")
-			fmt.Fprintln(w, "----------\t-----")
+		if isJSON() {
+			// JSON output - just the values
+			values := make(map[string]interface{})
 			for _, cap := range device.CapabilitiesObj {
-				fmt.Fprintf(w, "%s\t%v\n", cap.ID, cap.Value)
+				values[cap.ID] = cap.Value
 			}
-			w.Flush()
+			out, _ := json.MarshalIndent(map[string]interface{}{
+				"id":     device.ID,
+				"name":   device.Name,
+				"values": values,
+			}, "", "  ")
+			fmt.Println(string(out))
 			return nil
 		}
 
-		// JSON output - just the values
-		values := make(map[string]interface{})
+		color.New(color.Bold).Printf("Values for %s:\n\n", device.Name)
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Capability", "Value")
+		tbl.WithHeaderFormatter(headerFmt)
 		for _, cap := range device.CapabilitiesObj {
-			values[cap.ID] = cap.Value
+			tbl.AddRow(cap.ID, cap.Value)
 		}
-		out, _ := json.MarshalIndent(map[string]interface{}{
-			"id":     device.ID,
-			"name":   device.Name,
-			"values": values,
-		}, "", "  ")
-		fmt.Println(string(out))
+		tbl.Print()
 		return nil
 	},
 }

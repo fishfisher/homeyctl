@@ -39,22 +39,22 @@ func TestScopePresets_ControlHasDeviceControl(t *testing.T) {
 	control := scopePresets["control"]
 
 	hasDeviceControl := false
-	hasFlowStart := false
+	hasFlowFull := false
 
 	for _, scope := range control {
 		if scope == "homey.device.control" {
 			hasDeviceControl = true
 		}
-		if scope == "homey.flow.start" {
-			hasFlowStart = true
+		if scope == "homey.flow" {
+			hasFlowFull = true
 		}
 	}
 
 	if !hasDeviceControl {
 		t.Error("control preset should contain homey.device.control")
 	}
-	if !hasFlowStart {
-		t.Error("control preset should contain homey.flow.start")
+	if !hasFlowFull {
+		t.Error("control preset should contain homey.flow (full flow access)")
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 )
 
@@ -22,25 +24,26 @@ var weatherCurrentCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var weather struct {
-				State       string  `json:"state"`
-				Temperature float64 `json:"temperature"`
-				Humidity    float64 `json:"humidity"`
-				Pressure    float64 `json:"pressure"`
-			}
-			if err := json.Unmarshal(data, &weather); err != nil {
-				return err
-			}
-
-			fmt.Printf("Condition:   %s\n", weather.State)
-			fmt.Printf("Temperature: %.1f°C\n", weather.Temperature)
-			fmt.Printf("Humidity:    %.0f%%\n", weather.Humidity)
-			fmt.Printf("Pressure:    %.0f hPa\n", weather.Pressure)
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var weather struct {
+			State       string  `json:"state"`
+			Temperature float64 `json:"temperature"`
+			Humidity    float64 `json:"humidity"`
+			Pressure    float64 `json:"pressure"`
+		}
+		if err := json.Unmarshal(data, &weather); err != nil {
+			return err
+		}
+
+		color.New(color.Bold).Println("Current Weather")
+		fmt.Printf("  Condition:   %s\n", weather.State)
+		fmt.Printf("  Temperature: %.1f°C\n", weather.Temperature)
+		fmt.Printf("  Humidity:    %.0f%%\n", weather.Humidity)
+		fmt.Printf("  Pressure:    %.0f hPa\n", weather.Pressure)
 		return nil
 	},
 }
@@ -54,31 +57,33 @@ var weatherForecastCmd = &cobra.Command{
 			return err
 		}
 
-		if isTableFormat() {
-			var forecast []struct {
-				Time        string  `json:"time"`
-				State       string  `json:"state"`
-				Temperature float64 `json:"temperature"`
-				Humidity    float64 `json:"humidity"`
-			}
-			if err := json.Unmarshal(data, &forecast); err != nil {
-				return err
-			}
-
-			if len(forecast) == 0 {
-				fmt.Println("No forecast data available.")
-				return nil
-			}
-
-			fmt.Printf("%-20s %-15s %8s %8s\n", "TIME", "CONDITION", "TEMP", "HUMIDITY")
-			fmt.Printf("%-20s %-15s %8s %8s\n", "----", "---------", "----", "--------")
-			for _, f := range forecast {
-				fmt.Printf("%-20s %-15s %7.1f°C %7.0f%%\n", f.Time, f.State, f.Temperature, f.Humidity)
-			}
+		if isJSON() {
+			outputJSON(data)
 			return nil
 		}
 
-		outputJSON(data)
+		var forecast []struct {
+			Time        string  `json:"time"`
+			State       string  `json:"state"`
+			Temperature float64 `json:"temperature"`
+			Humidity    float64 `json:"humidity"`
+		}
+		if err := json.Unmarshal(data, &forecast); err != nil {
+			return err
+		}
+
+		if len(forecast) == 0 {
+			fmt.Println("No forecast data available.")
+			return nil
+		}
+
+		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		tbl := table.New("Time", "Condition", "Temp", "Humidity")
+		tbl.WithHeaderFormatter(headerFmt)
+		for _, f := range forecast {
+			tbl.AddRow(f.Time, f.State, fmt.Sprintf("%.1f°C", f.Temperature), fmt.Sprintf("%.0f%%", f.Humidity))
+		}
+		tbl.Print()
 		return nil
 	},
 }

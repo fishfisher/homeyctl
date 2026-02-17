@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -42,9 +43,9 @@ Examples:
 		}
 
 		if zoneRenameIcon != "" {
-			fmt.Printf("Renamed zone '%s' to '%s' with icon '%s'\n", zone.Name, newName, zoneRenameIcon)
+			color.Green("Renamed zone '%s' to '%s' with icon '%s'\n", zone.Name, newName, zoneRenameIcon)
 		} else {
-			fmt.Printf("Renamed zone '%s' to '%s'\n", zone.Name, newName)
+			color.Green("Renamed zone '%s' to '%s'\n", zone.Name, newName)
 		}
 		return nil
 	},
@@ -78,7 +79,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Changed icon for zone '%s' from '%s' to '%s'\n", zone.Name, zone.Icon, newIcon)
+		color.Green("Changed icon for zone '%s' from '%s' to '%s'\n", zone.Name, zone.Icon, newIcon)
 		return nil
 	},
 }
@@ -125,12 +126,12 @@ Examples:
 			return err
 		}
 
-		if isTableFormat() {
-			fmt.Printf("Created zone '%s' under '%s'\n", name, parent.Name)
+		if isJSON() {
+			outputJSON(result)
 			return nil
 		}
 
-		outputJSON(result)
+		color.Green("Created zone '%s' under '%s'\n", name, parent.Name)
 		return nil
 	},
 }
@@ -163,7 +164,7 @@ Examples:
 			return err
 		}
 
-		fmt.Printf("Moved zone '%s' to parent '%s'\n", zone.Name, newParent.Name)
+		color.Green("Moved zone '%s' to parent '%s'\n", zone.Name, newParent.Name)
 		return nil
 	},
 }
@@ -182,7 +183,7 @@ var zonesDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Deleted zone: %s\n", zone.Name)
+		color.Green("Deleted zone: %s\n", zone.Name)
 		return nil
 	},
 }
