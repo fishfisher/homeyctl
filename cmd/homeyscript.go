@@ -32,7 +32,7 @@ func findHomeyScript(nameOrID string) (*HomeyScript, error) {
 		return nil, err
 	}
 
-	var scripts []HomeyScript
+	var scripts map[string]HomeyScript
 	if err := json.Unmarshal(data, &scripts); err != nil {
 		return nil, fmt.Errorf("failed to parse scripts: %w", err)
 	}
@@ -60,7 +60,7 @@ var homeyscriptListCmd = &cobra.Command{
 			return nil
 		}
 
-		var scripts []HomeyScript
+		var scripts map[string]HomeyScript
 		if err := json.Unmarshal(data, &scripts); err != nil {
 			return fmt.Errorf("failed to parse scripts: %w", err)
 		}
