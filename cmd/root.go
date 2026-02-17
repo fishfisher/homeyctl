@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,10 +26,13 @@ var (
 	}
 )
 
-func SetVersionInfo(version, commit, date string) {
-	versionInfo.Version = version
+func SetVersionInfo(v, commit, date string) {
+	versionInfo.Version = v
 	versionInfo.Commit = commit
 	versionInfo.Date = date
+	if v != "" && v != "dev" {
+		rootCmd.Version = v
+	}
 }
 
 const setupInstructions = `
@@ -49,10 +53,33 @@ After setup, try:
 For more help: homeyctl --help
 `
 
+// version is set via ldflags at build/release time.
+var version string
+
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" {
+			if len(s.Value) > 7 {
+				return s.Value[:7]
+			}
+			return s.Value
+		}
+	}
+	return "dev"
+}
+
 var rootCmd = &cobra.Command{
-	Use:   "homeyctl",
-	Short: "CLI for Homey smart home",
-	Long:  `A command-line interface for controlling Homey devices, flows, and more.`,
+	Use:     "homeyctl",
+	Short:   "CLI for Homey smart home",
+	Long:    `A command-line interface for controlling Homey devices, flows, and more.`,
+	Version: buildVersion(),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if configured, show setup instructions if not
 		loadedCfg, _ := config.Load()
@@ -101,6 +128,7 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
+	rootCmd.Flags().BoolP("version", "v", false, "Print version")
 }
 
 // outputJSON pretty-prints JSON data
