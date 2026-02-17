@@ -20,8 +20,8 @@ func TestCommandSkipsConfigLoading(t *testing.T) {
 		{"version command", "homeyctl version", "version", true},
 		{"help command", "homeyctl help", "help", true},
 		{"completion command", "homeyctl completion", "completion", true},
-		{"ai command", "homeyctl ai", "ai", true},
 		{"login command", "homeyctl login", "login", true},
+		{"install-skill command", "homeyctl install-skill", "install-skill", true},
 		{"token create command", "homeyctl token create", "create", true},
 		{"token scopes command", "homeyctl token scopes", "scopes", true},
 		{"root command", "homeyctl", "homeyctl", true},
@@ -77,8 +77,8 @@ func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
 	// Skip config commands that don't need API client
 	if cmdName == "config" || cmdName == "version" || cmdName == "help" ||
 		cmdName == "set-token" || cmdName == "set-host" || cmdName == "show" ||
-		cmdName == "completion" || cmdName == "ai" || cmdName == "scopes" ||
-		cmdName == "login" || cmdPath == "homeyctl" {
+		cmdName == "completion" || cmdName == "scopes" ||
+		cmdName == "login" || cmdName == "install-skill" || cmdPath == "homeyctl" {
 		return true
 	}
 

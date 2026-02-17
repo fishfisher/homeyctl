@@ -68,7 +68,7 @@ var rootCmd = &cobra.Command{
 		cmdPath := cmd.CommandPath()
 		if cmd.Name() == "config" || cmd.Name() == "version" || cmd.Name() == "help" ||
 			cmd.Name() == "set-token" || cmd.Name() == "set-host" || cmd.Name() == "show" ||
-			cmd.Name() == "completion" || cmd.Name() == "ai" || cmd.Name() == "scopes" ||
+			cmd.Name() == "completion" || cmd.Name() == "scopes" ||
 			cmd.Name() == "login" || cmd.Name() == "install-skill" ||
 			cmdPath == "homeyctl token create" || cmdPath == "homeyctl" {
 			return nil

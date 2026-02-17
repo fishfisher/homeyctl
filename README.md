@@ -436,13 +436,13 @@ WRONG:   "homey:device:abc123:measure_temperature"
 
 ## AI Assistant Support
 
-Get context for AI assistants (Claude, ChatGPT, etc.):
+Install the embedded AI skill to your AI tool's skill directory:
 
 ```bash
-homeyctl ai
+homeyctl install-skill
 ```
 
-This outputs documentation, examples, and flow JSON format - perfect for AI chat or project context.
+This installs skill files that AI assistants (Claude Code, Codex, etc.) can discover and use for smart home control.
 
 ---
 

@@ -51,7 +51,7 @@ The client returns `json.RawMessage` for GET requests, allowing commands to pars
 
 ### Configuration
 
-Config is loaded in `PersistentPreRunE` on rootCmd. Commands that don't need API access (config, version, help, ai, login, create) skip loading. Environment variables prefixed with `HOMEY_` override config file values.
+Config is loaded in `PersistentPreRunE` on rootCmd. Commands that don't need API access (config, version, help, login, install-skill, create) skip loading. Environment variables prefixed with `HOMEY_` override config file values.
 
 ### Authentication & OAuth
 
@@ -79,7 +79,7 @@ PATs cannot create other PATs - OAuth session required for token management.
 
 ## Quick Context
 
-Run `homeyctl ai` to get full documentation for AI assistants - includes flow format, examples, and common patterns.
+Run `homeyctl install-skill` to install the embedded AI skill files to your AI tool's skill directory (Claude Code, Codex, etc.).
 
 ## Key Learnings
 
