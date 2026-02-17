@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/fishfisher/homeyctl/internal/config"
@@ -61,7 +62,11 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
+		body := string(respBody)
+		if resp.StatusCode == 403 && strings.Contains(body, "Missing Scopes") {
+			return nil, fmt.Errorf("missing scopes: your token doesn't have permission for this operation.\nOAuth tokens have limited scopes. Use an API key for full access:\n  homeyctl auth api-key <key>\nCreate one at: my.homey.app → Settings → API Keys")
+		}
+		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, body)
 	}
 
 	return respBody, nil
