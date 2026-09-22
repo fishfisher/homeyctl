@@ -129,13 +129,23 @@ homeyctl flows validate draft.json --json          # Offline structure and graph
 homeyctl flows validate draft.json --online --json # Installed cards and Logic references
 homeyctl flows create draft.json --ai --dry-run     # Preview; no API calls or writes
 homeyctl flows create draft.json --ai --json        # Disabled, in the AI Flows folder
-homeyctl flows audit --json                        # Read-only review of existing flows
+homeyctl flows list --folder "AI Flows" --disabled # Drafts awaiting review
+homeyctl flows enable <id>                         # Show what enabling does; no change
+homeyctl flows enable <id> --yes                   # Enable after review
+homeyctl flows audit --problems                    # Read-only; only flows with findings
 homeyctl flows restore backup.json --dry-run       # Preview a restore from a backup
 ```
 
 `--ai` overrides `enabled` to false and assigns the root-level `AI Flows` folder.
 The user can review the draft in Homey, then choose when to enable it and where
 to move it. Creating a draft does not authorize executing its physical actions.
+
+`flows enable` is where that authorization happens. Without `--yes` it lists
+what the flow triggers on and what it does, with device names resolved and
+missing devices marked, and changes nothing. With `--yes` it backs up the flow,
+enables it, and reads it back. `flows disable` needs no confirmation and works
+even on a flow that fails validation, so a broken flow can always be switched
+off.
 
 Every flow update and deletion first saves a full local backup, and aborts if
 the backup fails. Update previews show the merged before/after document. Writes
@@ -239,10 +249,16 @@ Automate your home with flows.
 # List and view
 homeyctl flows list                          # List all flows
 homeyctl flows list --match "morning"        # Filter by name
+homeyctl flows list --folder "Soverom"       # Only flows directly in a folder
+homeyctl flows list --disabled               # Or --enabled
 homeyctl flows get "Flow Name"               # Get flow details
+homeyctl flows audit --problems              # Validate; show only flows with findings
 
 # Control
 homeyctl flows trigger "Good Morning"        # Trigger manually
+homeyctl flows enable "Good Morning"         # Show what it would do; no change
+homeyctl flows enable "Good Morning" --yes   # Back up, then enable
+homeyctl flows disable "Good Morning"        # Back up, then disable
 
 # Create and modify
 homeyctl flows create flow.json              # Create from JSON
@@ -468,8 +484,8 @@ homeyctl devices list --json
 # Find devices by name
 homeyctl devices list --json | jq '.[] | select(.name | test("light";"i"))'
 
-# Get all enabled flows
-homeyctl flows list --json | jq '.[] | select(.enabled)'
+# Names of broken flows
+homeyctl flows list --json | jq -r '.[] | select(.broken) | .name'
 
 # Get device IDs in a zone
 homeyctl devices list --json | jq '.[] | select(.zone == "zone-id") | .id'

@@ -31,8 +31,10 @@ For authorized control, use `devices on <id>`, `devices off <id>`, or `devices s
 
 ```bash
 homeyctl flows list --json
+homeyctl flows list --folder "AI Flows" --disabled --json
 homeyctl flows get <id> --json
 homeyctl flows audit --json
+homeyctl flows audit --problems --json
 homeyctl flows cards --type action --filter logic --json
 homeyctl flows autocomplete <card-id> <arg-name> --type action --query text
 homeyctl flows validate draft.json --json
@@ -41,7 +43,9 @@ homeyctl flows create draft.json --ai --dry-run
 homeyctl flows create draft.json --ai --json
 homeyctl flows update <id> patch.json --dry-run
 homeyctl flows update <id> patch.json --json
-homeyctl flows update <id> --data '{"enabled":false}'
+homeyctl flows enable <id> --json        # Preview effects; changes nothing
+homeyctl flows enable <id> --yes --json  # Only after the user authorized the effects
+homeyctl flows disable <id> --json
 homeyctl flows restore <backup-file> --dry-run
 homeyctl flows restore <backup-file> --json
 homeyctl flows folders list --json

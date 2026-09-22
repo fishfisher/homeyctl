@@ -17,19 +17,36 @@ import (
 )
 
 type Flow struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Enabled     bool   `json:"enabled"`
-	Triggerable bool   `json:"triggerable"`
-	Broken      bool   `json:"broken"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Enabled     bool      `json:"enabled"`
+	Triggerable bool      `json:"triggerable"`
+	Broken      bool      `json:"broken"`
+	Folder      folderRef `json:"folder"`
 }
 
 type AdvancedFlow struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Enabled     bool   `json:"enabled"`
-	Triggerable bool   `json:"triggerable"`
-	Broken      bool   `json:"broken"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Enabled     bool      `json:"enabled"`
+	Triggerable bool      `json:"triggerable"`
+	Broken      bool      `json:"broken"`
+	Folder      folderRef `json:"folder"`
+}
+
+// folderRef is a flow's folder ID. Homey sends a string or null for a flow at
+// the root; anything else is treated as the root too, so an unexpected value
+// can never break listing.
+type folderRef string
+
+func (f *folderRef) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		*f = ""
+		return nil
+	}
+	*f = folderRef(s)
+	return nil
 }
 
 var flowsCmd = &cobra.Command{
@@ -133,18 +150,45 @@ type FlowListItem struct {
 	Enabled     bool   `json:"enabled"`
 	Triggerable bool   `json:"triggerable"`
 	Broken      bool   `json:"broken"`
+	Folder      string `json:"folder,omitempty"`
+}
+
+// flowListFilter selects flows by name, folder, and enabled state.
+type flowListFilter struct {
+	match    string
+	folderID string // "" = any folder
+	enabled  *bool  // nil = either state
+}
+
+func (f flowListFilter) keep(name string, folder folderRef, enabled bool) bool {
+	if f.match != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(f.match)) {
+		return false
+	}
+	if f.folderID != "" && string(folder) != f.folderID {
+		return false
+	}
+	return f.enabled == nil || *f.enabled == enabled
 }
 
 var flowsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all flows",
-	Long: `List all flows, optionally filtered by name.
+	Long: `List all flows, optionally filtered by name, folder, or enabled state.
+
+--folder matches flows directly in that folder (by name or ID), not in its
+subfolders.
 
 Examples:
   homeyctl flows list
   homeyctl flows list --match "night"
-  homeyctl flows list --match "motion"`,
+  homeyctl flows list --folder "AI Flows" --disabled   # Drafts awaiting review
+  homeyctl flows list --enabled`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		filter, err := flowListFilterFromFlags(cmd)
+		if err != nil {
+			return err
+		}
+
 		// Get both normal and advanced flows
 		normalData, err := apiClient.GetFlows()
 		if err != nil {
@@ -168,7 +212,7 @@ Examples:
 		// Build flat list with optional filtering
 		allFlows := make([]FlowListItem, 0)
 		for _, f := range normalFlows {
-			if flowsMatchFilter == "" || strings.Contains(strings.ToLower(f.Name), strings.ToLower(flowsMatchFilter)) {
+			if filter.keep(f.Name, f.Folder, f.Enabled) {
 				allFlows = append(allFlows, FlowListItem{
 					ID:          f.ID,
 					Name:        f.Name,
@@ -176,11 +220,12 @@ Examples:
 					Enabled:     f.Enabled,
 					Triggerable: f.Triggerable,
 					Broken:      f.Broken,
+					Folder:      string(f.Folder),
 				})
 			}
 		}
 		for _, f := range advancedFlows {
-			if flowsMatchFilter == "" || strings.Contains(strings.ToLower(f.Name), strings.ToLower(flowsMatchFilter)) {
+			if filter.keep(f.Name, f.Folder, f.Enabled) {
 				allFlows = append(allFlows, FlowListItem{
 					ID:          f.ID,
 					Name:        f.Name,
@@ -188,6 +233,7 @@ Examples:
 					Enabled:     f.Enabled,
 					Triggerable: f.Triggerable,
 					Broken:      f.Broken,
+					Folder:      string(f.Folder),
 				})
 			}
 		}
@@ -219,6 +265,26 @@ Examples:
 		tbl.Print()
 		return nil
 	},
+}
+
+func flowListFilterFromFlags(cmd *cobra.Command) (flowListFilter, error) {
+	filter := flowListFilter{match: flowsMatchFilter}
+	if onlyEnabled, _ := cmd.Flags().GetBool("enabled"); onlyEnabled {
+		v := true
+		filter.enabled = &v
+	}
+	if onlyDisabled, _ := cmd.Flags().GetBool("disabled"); onlyDisabled {
+		v := false
+		filter.enabled = &v
+	}
+	if name, _ := cmd.Flags().GetString("folder"); name != "" {
+		folder, err := findFlowFolder(name)
+		if err != nil {
+			return filter, err
+		}
+		filter.folderID = folder.ID
+	}
+	return filter, nil
 }
 
 var flowsTriggerCmd = &cobra.Command{
@@ -881,6 +947,10 @@ func init() {
 	rootCmd.AddCommand(flowsCmd)
 	flowsCmd.AddCommand(flowsListCmd)
 	flowsListCmd.Flags().StringVar(&flowsMatchFilter, "match", "", "Filter flows by name (case-insensitive)")
+	flowsListCmd.Flags().String("folder", "", "Only flows directly in this folder (name or ID)")
+	flowsListCmd.Flags().Bool("enabled", false, "Only enabled flows")
+	flowsListCmd.Flags().Bool("disabled", false, "Only disabled flows")
+	flowsListCmd.MarkFlagsMutuallyExclusive("enabled", "disabled")
 	flowsCmd.AddCommand(flowsGetCmd)
 	flowsCmd.AddCommand(flowsCreateCmd)
 	flowsCmd.AddCommand(flowsUpdateCmd)
