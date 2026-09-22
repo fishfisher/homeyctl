@@ -26,13 +26,17 @@ var (
 	}
 )
 
+// SetVersionInfo records the build's version. main.go is the single source:
+// goreleaser sets main.version/commit/date via ldflags. A local `go build`
+// leaves version as "dev", which is shown with the VCS revision when known.
 func SetVersionInfo(v, commit, date string) {
+	if v == "" {
+		v = "dev"
+	}
 	versionInfo.Version = v
 	versionInfo.Commit = commit
 	versionInfo.Date = date
-	if v != "" && v != "dev" {
-		rootCmd.Version = v
-	}
+	rootCmd.Version = displayVersion(v)
 }
 
 const setupInstructions = `
@@ -53,33 +57,30 @@ After setup, try:
 For more help: homeyctl --help
 `
 
-// version is set via ldflags at build/release time.
-var version string
-
-func buildVersion() string {
-	if version != "" {
-		return version
+func displayVersion(v string) string {
+	if v != "dev" {
+		return v
 	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "dev"
+		return v
 	}
 	for _, s := range info.Settings {
-		if s.Key == "vcs.revision" {
+		if s.Key == "vcs.revision" && s.Value != "" {
 			if len(s.Value) > 7 {
-				return s.Value[:7]
+				return "dev-" + s.Value[:7]
 			}
-			return s.Value
+			return "dev-" + s.Value
 		}
 	}
-	return "dev"
+	return v
 }
 
 var rootCmd = &cobra.Command{
 	Use:     "homeyctl",
 	Short:   "CLI for Homey smart home",
 	Long:    `A command-line interface for controlling Homey devices, flows, and more.`,
-	Version: buildVersion(),
+	Version: "dev",
 	// A runtime failure is not a usage mistake. Printing the whole flag block
 	// after every network or validation error buries the message that matters,
 	// especially for agents reading this output.
@@ -97,6 +98,7 @@ var rootCmd = &cobra.Command{
 		cmd.Help()
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		startUpdateCheck(cmd)
 		if cmd.CommandPath() == "homeyctl flows validate" {
 			online, _ := cmd.Flags().GetBool("online")
 			if !online {
@@ -129,6 +131,9 @@ var rootCmd = &cobra.Command{
 		apiClient = client.New(cfg)
 		return nil
 	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		finishUpdateCheck()
+	},
 }
 
 func isConfigured(cfg *config.Config) bool {
@@ -140,7 +145,7 @@ func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
 		cmdName == "set-host" || cmdName == "show" ||
 		cmdName == "completion" || cmdName == "install-skill" ||
 		cmdName == "auth" || cmdName == "login" || cmdName == "api-key" ||
-		cmdName == "status" || cmdName == "scopes" ||
+		cmdName == "status" || cmdName == "scopes" || cmdName == "upgrade" ||
 		strings.HasPrefix(cmdPath, "homeyctl auth") ||
 		strings.HasPrefix(cmdPath, "homeyctl config") ||
 		cmdPath == "homeyctl"
