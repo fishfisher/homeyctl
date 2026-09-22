@@ -51,7 +51,8 @@ var configShowCmd = &cobra.Command{
 					"port":  loadedCfg.Port,
 					"token": maskToken(loadedCfg.Token),
 				},
-				"format": loadedCfg.Format,
+				"format":      loadedCfg.Format,
+				"updateCheck": !loadedCfg.NoUpdateCheck,
 			}
 			out, _ := json.MarshalIndent(output, "", "  ")
 			fmt.Println(string(out))
@@ -84,6 +85,11 @@ var configShowCmd = &cobra.Command{
 		fmt.Printf("Token:          %s\n", maskToken(loadedCfg.Cloud.Token))
 		fmt.Println()
 
+		fmt.Println("Updates")
+		fmt.Println("-------")
+		fmt.Printf("Update check:   %s\n", onOff(!loadedCfg.NoUpdateCheck))
+		fmt.Println()
+
 		// Show legacy if set
 		if loadedCfg.Host != "localhost" || loadedCfg.Token != "" {
 			fmt.Println("Legacy (deprecated)")
@@ -93,6 +99,49 @@ var configShowCmd = &cobra.Command{
 			fmt.Printf("Token:          %s\n", maskToken(loadedCfg.Token))
 		}
 
+		return nil
+	},
+}
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
+var configSetUpdateCheckCmd = &cobra.Command{
+	Use:   "set-update-check <on|off>",
+	Short: "Turn the daily new-version notice on or off",
+	Long: `Turn the daily "a newer homeyctl is available" notice on or off.
+
+When on, homeyctl looks up the latest GitHub release at most once a day, in the
+background, and prints a single line to stderr when you are behind. It never
+delays a command and stays silent when offline.
+
+HOMEYCTL_NO_UPDATE_CHECK=1 also disables it, without touching the config.`,
+	Args:      cobra.ExactArgs(1),
+	ValidArgs: []string{"on", "off"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var enabled bool
+		switch args[0] {
+		case "on":
+			enabled = true
+		case "off":
+			enabled = false
+		default:
+			return fmt.Errorf("invalid value: %s (must be on or off)", args[0])
+		}
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		cfg.NoUpdateCheck = !enabled
+		if err := config.Save(cfg); err != nil {
+			return err
+		}
+		color.Green("Update check: %s\n", onOff(enabled))
 		return nil
 	},
 }
@@ -315,6 +364,7 @@ func init() {
 	configCmd.AddCommand(configSetModeCmd)
 	configCmd.AddCommand(configSetLocalCmd)
 	configCmd.AddCommand(configSetCloudCmd)
+	configCmd.AddCommand(configSetUpdateCheckCmd)
 	configSetCloudCmd.Flags().String("address", "", "Selected Homey's remote HTTPS API address")
 	configCmd.AddCommand(configDiscoverCmd)
 	configDiscoverCmd.Flags().IntVar(&discoverTimeout, "timeout", 5, "Discovery timeout in seconds")

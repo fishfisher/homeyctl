@@ -379,8 +379,21 @@ func loadFlowCatalog() (*flowvalidation.Catalog, error) {
 var flowsAuditCmd = &cobra.Command{
 	Use:   "audit",
 	Short: "Read-only validation of all existing flows",
-	Args:  cobra.NoArgs,
+	Long: `Validate existing flows without changing anything.
+
+Accepts the same filters as flows list, plus --problems to show only flows with
+validation errors or warnings.
+
+Examples:
+  homeyctl flows audit --problems
+  homeyctl flows audit --folder "AI Flows" --json`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		filter, err := flowListFilterFromFlags(cmd)
+		if err != nil {
+			return err
+		}
+		problemsOnly, _ := cmd.Flags().GetBool("problems")
 		type result struct {
 			ID     string                `json:"id"`
 			Name   string                `json:"name"`
@@ -389,7 +402,6 @@ var flowsAuditCmd = &cobra.Command{
 		results := []result{}
 		for _, advanced := range []bool{false, true} {
 			var data json.RawMessage
-			var err error
 			if advanced {
 				data, err = apiClient.GetAdvancedFlows()
 			} else {
@@ -404,7 +416,16 @@ var flowsAuditCmd = &cobra.Command{
 			}
 			for id, document := range documents {
 				name, _ := document["name"].(string)
-				results = append(results, result{ID: id, Name: name, Report: flowvalidation.Validate(document, advanced)})
+				folder, _ := document["folder"].(string)
+				enabled, _ := document["enabled"].(bool)
+				if !filter.keep(name, folderRef(folder), enabled) {
+					continue
+				}
+				report := flowvalidation.Validate(document, advanced)
+				if problemsOnly && len(report.Errors) == 0 && len(report.Warnings) == 0 {
+					continue
+				}
+				results = append(results, result{ID: id, Name: name, Report: report})
 			}
 		}
 		sort.Slice(results, func(i, j int) bool { return results[i].ID < results[j].ID })
@@ -423,4 +444,12 @@ func init() {
 	flowsValidateCmd.Flags().Bool("online", false, "Verify card IDs and Logic variables against this Homey (read-only)")
 	flowsRestoreCmd.Flags().Bool("dry-run", false, "Validate and preview the restore without changing Homey")
 	flowsRestoreCmd.Flags().String("to", "", "Restore into this flow instead of the backup's own id")
+	// flowListFilterFromFlags reads --match through flowsMatchFilter, which is
+	// bound to flows list; audit gets its own flag writing the same variable.
+	flowsAuditCmd.Flags().StringVar(&flowsMatchFilter, "match", "", "Only flows whose name contains this (case-insensitive)")
+	flowsAuditCmd.Flags().String("folder", "", "Only flows directly in this folder (name or ID)")
+	flowsAuditCmd.Flags().Bool("enabled", false, "Only enabled flows")
+	flowsAuditCmd.Flags().Bool("disabled", false, "Only disabled flows")
+	flowsAuditCmd.Flags().Bool("problems", false, "Only flows with validation errors or warnings")
+	flowsAuditCmd.MarkFlagsMutuallyExclusive("enabled", "disabled")
 }

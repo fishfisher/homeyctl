@@ -15,12 +15,51 @@ curl -fsSL https://raw.githubusercontent.com/fishfisher/homeyctl/main/install.sh
 ```
 
 Fetches the latest release, verifies it against the release checksums, and installs
-to `~/.local/bin`. Run the same command again to upgrade. Override with
-`HOMEYCTL_VERSION=v1.4.0` or `HOMEYCTL_BIN_DIR=~/bin`.
+to `~/.local/bin`. Override with `HOMEYCTL_VERSION=v1.4.0` or
+`HOMEYCTL_BIN_DIR=~/bin`. The install stops if the checksum cannot be verified;
+`HOMEYCTL_SKIP_CHECKSUM=1` overrides that for a release that genuinely lacks
+`checksums.txt`.
 
 If `~/.local/bin` is not on your `PATH`, the script says so; add it to your shell
 profile. It installs outside Homebrew's prefix on purpose, so `brew` never manages
 or removes the binary.
+
+### Upgrading
+
+```bash
+homeyctl upgrade                   # Latest release, verified, replaced atomically
+homeyctl upgrade --check           # Report only; exits 1 when behind
+homeyctl upgrade --tag v1.4.0      # A specific release
+homeyctl install-skill --force     # Then refresh the bundled AI skill
+```
+
+homeyctl also checks for a newer release at most once a day, in the background,
+and prints one line to stderr when you are behind. It never delays a command and
+stays silent offline. Turn it off with `homeyctl config set-update-check off` or
+`HOMEYCTL_NO_UPDATE_CHECK=1`. Versions before v1.5.0 have no `upgrade` command;
+rerun the install script once to get it.
+
+### Shell completion
+
+Completion covers every command and flag:
+
+```bash
+# zsh (add to ~/.zshrc)
+source <(homeyctl completion zsh)
+
+# bash, fish, powershell
+homeyctl completion bash --help
+```
+
+### Uninstalling
+
+```bash
+rm ~/.local/bin/homeyctl
+rm -rf ~/Library/Application\ Support/homeyctl   # Config, token, and flow backups
+```
+
+The second line deletes your flow backups too; keep that directory if you might
+need to restore a flow.
 
 ### Download a binary
 
@@ -129,13 +168,23 @@ homeyctl flows validate draft.json --json          # Offline structure and graph
 homeyctl flows validate draft.json --online --json # Installed cards and Logic references
 homeyctl flows create draft.json --ai --dry-run     # Preview; no API calls or writes
 homeyctl flows create draft.json --ai --json        # Disabled, in the AI Flows folder
-homeyctl flows audit --json                        # Read-only review of existing flows
+homeyctl flows list --folder "AI Flows" --disabled # Drafts awaiting review
+homeyctl flows enable <id>                         # Show what enabling does; no change
+homeyctl flows enable <id> --yes                   # Enable after review
+homeyctl flows audit --problems                    # Read-only; only flows with findings
 homeyctl flows restore backup.json --dry-run       # Preview a restore from a backup
 ```
 
 `--ai` overrides `enabled` to false and assigns the root-level `AI Flows` folder.
 The user can review the draft in Homey, then choose when to enable it and where
 to move it. Creating a draft does not authorize executing its physical actions.
+
+`flows enable` is where that authorization happens. Without `--yes` it lists
+what the flow triggers on and what it does, with device names resolved and
+missing devices marked, and changes nothing. With `--yes` it backs up the flow,
+enables it, and reads it back. `flows disable` needs no confirmation and works
+even on a flow that fails validation, so a broken flow can always be switched
+off.
 
 Every flow update and deletion first saves a full local backup, and aborts if
 the backup fails. Update previews show the merged before/after document. Writes
@@ -188,6 +237,7 @@ The most commonly used commands for controlling your smart home.
 # List and search
 homeyctl devices list                        # List all devices
 homeyctl devices list --match "kitchen"      # Filter by name
+homeyctl devices list --zone "Hovedetasje"   # A zone and every zone beneath it
 homeyctl devices get "Device Name"           # Get device details
 homeyctl devices values "Device Name"        # Get all capability values
 
@@ -239,10 +289,16 @@ Automate your home with flows.
 # List and view
 homeyctl flows list                          # List all flows
 homeyctl flows list --match "morning"        # Filter by name
+homeyctl flows list --folder "Soverom"       # Only flows directly in a folder
+homeyctl flows list --disabled               # Or --enabled
 homeyctl flows get "Flow Name"               # Get flow details
+homeyctl flows audit --problems              # Validate; show only flows with findings
 
 # Control
 homeyctl flows trigger "Good Morning"        # Trigger manually
+homeyctl flows enable "Good Morning"         # Show what it would do; no change
+homeyctl flows enable "Good Morning" --yes   # Back up, then enable
+homeyctl flows disable "Good Morning"        # Back up, then disable
 
 # Create and modify
 homeyctl flows create flow.json              # Create from JSON
@@ -468,11 +524,11 @@ homeyctl devices list --json
 # Find devices by name
 homeyctl devices list --json | jq '.[] | select(.name | test("light";"i"))'
 
-# Get all enabled flows
-homeyctl flows list --json | jq '.[] | select(.enabled)'
+# Names of broken flows
+homeyctl flows list --json | jq -r '.[] | select(.broken) | .name'
 
-# Get device IDs in a zone
-homeyctl devices list --json | jq '.[] | select(.zone == "zone-id") | .id'
+# Device IDs on a floor, including its rooms
+homeyctl devices list --zone "Hovedetasje" --json | jq -r '.[].id'
 ```
 
 ---

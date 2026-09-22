@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/fatih/color"
@@ -74,13 +75,36 @@ func findDevice(nameOrID string) (*Device, error) {
 var devicesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all devices",
-	Long: `List all devices, optionally filtered by name.
+	Long: `List all devices, optionally filtered by name or zone.
+
+--zone includes every zone beneath it, so a floor lists the devices in its
+rooms. The table then gains a Zone column.
 
 Examples:
   homeyctl devices list
   homeyctl devices list --match "kitchen"
-  homeyctl devices list --match "light"`,
+  homeyctl devices list --zone "Hovedetasje"
+  homeyctl devices list --zone "Stue" --match "lamp"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		zoneName, _ := cmd.Flags().GetString("zone")
+		var zoneNames map[string]string // zone ID → name, only with --zone
+		var inZone map[string]bool      // the zone and everything beneath it
+		if zoneName != "" {
+			zone, err := findZone(zoneName)
+			if err != nil {
+				return err
+			}
+			zones, err := loadZones()
+			if err != nil {
+				return err
+			}
+			inZone = zoneSubtree(zones, zone.ID)
+			zoneNames = make(map[string]string, len(zones))
+			for id, z := range zones {
+				zoneNames[id] = z.Name
+			}
+		}
+
 		data, err := apiClient.GetDevices()
 		if err != nil {
 			return err
@@ -91,13 +115,23 @@ Examples:
 			return fmt.Errorf("failed to parse devices: %w", err)
 		}
 
-		// Filter devices if --match is provided
 		var filtered []Device
 		for _, d := range devices {
-			if devicesMatchFilter == "" || strings.Contains(strings.ToLower(d.Name), strings.ToLower(devicesMatchFilter)) {
-				filtered = append(filtered, d)
+			if devicesMatchFilter != "" && !strings.Contains(strings.ToLower(d.Name), strings.ToLower(devicesMatchFilter)) {
+				continue
 			}
+			if inZone != nil && !inZone[d.Zone] {
+				continue
+			}
+			filtered = append(filtered, d)
 		}
+		// Map iteration order is random; keep output stable across runs.
+		sort.Slice(filtered, func(i, j int) bool {
+			if filtered[i].Name == filtered[j].Name {
+				return filtered[i].ID < filtered[j].ID
+			}
+			return filtered[i].Name < filtered[j].Name
+		})
 
 		if isJSON() {
 			out, _ := json.MarshalIndent(filtered, "", "  ")
@@ -106,6 +140,15 @@ Examples:
 		}
 
 		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
+		if zoneNames != nil {
+			tbl := table.New("Name", "Class", "Zone", "ID")
+			tbl.WithHeaderFormatter(headerFmt)
+			for _, d := range filtered {
+				tbl.AddRow(d.Name, d.Class, zoneNames[d.Zone], d.ID)
+			}
+			tbl.Print()
+			return nil
+		}
 		tbl := table.New("Name", "Class", "ID")
 		tbl.WithHeaderFormatter(headerFmt)
 		for _, d := range filtered {
@@ -114,6 +157,42 @@ Examples:
 		tbl.Print()
 		return nil
 	},
+}
+
+func loadZones() (map[string]Zone, error) {
+	data, err := apiClient.GetZones()
+	if err != nil {
+		return nil, err
+	}
+	var zones map[string]Zone
+	if err := json.Unmarshal(data, &zones); err != nil {
+		return nil, fmt.Errorf("failed to parse zones: %w", err)
+	}
+	return zones, nil
+}
+
+// zoneSubtree returns root and every zone beneath it. It guards against a
+// parent cycle, which would otherwise loop forever on malformed data.
+func zoneSubtree(zones map[string]Zone, root string) map[string]bool {
+	children := make(map[string][]string, len(zones))
+	for id, z := range zones {
+		if z.Parent != "" {
+			children[z.Parent] = append(children[z.Parent], id)
+		}
+	}
+	in := map[string]bool{root: true}
+	queue := []string{root}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, child := range children[id] {
+			if !in[child] {
+				in[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	return in
 }
 
 var devicesGetCmd = &cobra.Command{
@@ -199,6 +278,7 @@ func init() {
 	rootCmd.AddCommand(devicesCmd)
 	devicesCmd.AddCommand(devicesListCmd)
 	devicesListCmd.Flags().StringVar(&devicesMatchFilter, "match", "", "Filter devices by name (case-insensitive)")
+	devicesListCmd.Flags().String("zone", "", "Only devices in this zone or any zone beneath it (name or ID)")
 	devicesCmd.AddCommand(devicesGetCmd)
 	devicesCmd.AddCommand(devicesValuesCmd)
 }

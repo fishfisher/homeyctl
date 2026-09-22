@@ -34,6 +34,11 @@ type Config struct {
 	Mode  string      `mapstructure:"mode"` // auto, local, cloud
 	Local LocalConfig `mapstructure:"local"`
 	Cloud CloudConfig `mapstructure:"cloud"`
+
+	// NoUpdateCheck turns off the once-a-day "newer version available"
+	// notice. Negative on purpose: the zero value keeps the check on, so a
+	// Config built from scratch and saved never disables it by accident.
+	NoUpdateCheck bool `mapstructure:"no_update_check"`
 }
 
 // BaseURL returns the API base URL based on current mode
@@ -215,6 +220,7 @@ func Save(cfg *Config) error {
 	viper.Set("local.token", cfg.Local.Token)
 	viper.Set("cloud.token", cfg.Cloud.Token)
 	viper.Set("cloud.address", cfg.Cloud.Address)
+	viper.Set("no_update_check", cfg.NoUpdateCheck)
 
 	configPath := filepath.Join(dir, "config.toml")
 	viper.SetConfigPermissions(0o600)

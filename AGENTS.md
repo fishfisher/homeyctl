@@ -44,6 +44,8 @@ Use `variables batch` to plan persistent state. Follow the skill's approval
 thresholds for 5+, 10+, and 30+ new variables, counting the entire operation.
 Never bypass review by splitting batches or using raw API/HomeyScript writes.
 Do not trigger or enable drafts until the user authorizes their effects.
+`flows enable <id>` without `--yes` shows those effects and changes nothing;
+add `--yes` only after the user has approved them.
 
 1. **Discover IDs first:**
    ```bash

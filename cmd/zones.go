@@ -78,6 +78,15 @@ func findZone(nameOrID string) (*Zone, error) {
 			return &z, nil
 		}
 	}
+	// Zone names typed in the Homey app can carry stray spaces ("Bad "), which
+	// are invisible in every listing. Fall back to comparing trimmed names so
+	// the name as it appears still works; an exact match above always wins.
+	want := strings.TrimSpace(nameOrID)
+	for _, z := range zones {
+		if strings.EqualFold(strings.TrimSpace(z.Name), want) {
+			return &z, nil
+		}
+	}
 
 	return nil, fmt.Errorf("zone not found: %s", nameOrID)
 }

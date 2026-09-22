@@ -99,7 +99,7 @@ homeyctl flows create draft.json --ai --json
 
 Report the created draft's name, ID, folder, disabled state, variables created or reused, and how to review it in Homey. Give a short behavior checklist, including the false/error branch and manual override. Invite the user to inspect it and decide when to enable it and where to move it. Do not trigger the flow as a validation shortcut: disabled flows can still have manually executable paths.
 
-Enable or move it only after the user authorizes that next step. Use its ID and `flows update` so a backup is taken. Provide the destination folder ID as `folder`; use JSON `null` to move to the root. Confirm the final state from Homey.
+Enable or move it only after the user authorizes that next step. `flows list --folder "AI Flows" --disabled --json` lists the drafts awaiting review. `flows enable <id>` without `--yes` prints what the flow triggers on and what it does, with device names resolved and missing devices marked, and changes nothing. Show that summary to the user, and add `--yes` only once they have authorized those effects. The CLI backs up the flow, writes it, and reads it back. To move a draft, use `flows update <id>` with the destination folder ID as `folder`; use JSON `null` to move it to the root. Confirm the final state from Homey.
 
 ## Revise and recover existing flows
 
