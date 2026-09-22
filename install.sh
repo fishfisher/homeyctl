@@ -59,19 +59,10 @@ if [ -z "$version" ]; then
 	[ -n "$version" ] || die "could not resolve the latest release tag; set HOMEYCTL_VERSION"
 fi
 
-bin_dir="${HOMEYCTL_BIN_DIR:-}"
-if [ -z "$bin_dir" ]; then
-	for candidate in /usr/local/bin /opt/homebrew/bin "$HOME/.local/bin"; do
-		if [ -d "$candidate" ] && [ -w "$candidate" ]; then
-			bin_dir="$candidate"
-			break
-		fi
-	done
-fi
-if [ -z "$bin_dir" ]; then
-	bin_dir="$HOME/.local/bin"
-	mkdir -p "$bin_dir"
-fi
+# Default to a user-owned directory. /opt/homebrew/bin belongs to Homebrew, and
+# dropping an unmanaged binary there makes `brew doctor` complain and risks being
+# clobbered by Homebrew itself.
+bin_dir="${HOMEYCTL_BIN_DIR:-$HOME/.local/bin}"
 [ -d "$bin_dir" ] || mkdir -p "$bin_dir"
 [ -w "$bin_dir" ] || die "$bin_dir is not writable; set HOMEYCTL_BIN_DIR to a directory you own"
 
@@ -118,5 +109,12 @@ case ":${PATH}:" in
 *":${bin_dir}:"*) ;;
 *) echo "Note: ${bin_dir} is not on your PATH. Add it to your shell profile." >&2 ;;
 esac
+
+# A copy left behind by an older install can shadow the one just written.
+if command -v which >/dev/null 2>&1; then
+	which -a "$BIN_NAME" 2>/dev/null | grep -v "^${bin_dir}/${BIN_NAME}$" | while read -r other; do
+		[ -n "$other" ] && echo "Note: another ${BIN_NAME} exists at ${other}; remove it to avoid confusion." >&2
+	done
+fi
 
 "${bin_dir}/${BIN_NAME}" --version || true

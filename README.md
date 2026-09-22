@@ -15,9 +15,12 @@ curl -fsSL https://raw.githubusercontent.com/fishfisher/homeyctl/main/install.sh
 ```
 
 Fetches the latest release, verifies it against the release checksums, and installs
-to the first writable of `/usr/local/bin`, `/opt/homebrew/bin`, or `~/.local/bin`.
-Run the same command again to upgrade. Override with `HOMEYCTL_VERSION=v1.4.0` or
-`HOMEYCTL_BIN_DIR=~/bin`.
+to `~/.local/bin`. Run the same command again to upgrade. Override with
+`HOMEYCTL_VERSION=v1.4.0` or `HOMEYCTL_BIN_DIR=~/bin`.
+
+If `~/.local/bin` is not on your `PATH`, the script says so; add it to your shell
+profile. It installs outside Homebrew's prefix on purpose, so `brew` never manages
+or removes the binary.
 
 ### Download a binary
 
