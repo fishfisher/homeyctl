@@ -4,12 +4,17 @@
 #   curl -fsSL https://raw.githubusercontent.com/fishfisher/homeyctl/main/install.sh | sh
 #
 # Options (environment variables):
-#   HOMEYCTL_VERSION   Tag to install, e.g. v1.4.0. Defaults to the latest release.
-#   HOMEYCTL_BIN_DIR   Install directory. Defaults to the first writable of
-#                      /usr/local/bin, /opt/homebrew/bin, $HOME/.local/bin.
+#   HOMEYCTL_VERSION        Tag to install, e.g. v1.4.0. Defaults to the latest release.
+#   HOMEYCTL_BIN_DIR        Install directory. Defaults to $HOME/.local/bin.
+#   HOMEYCTL_SKIP_CHECKSUM  Set to 1 to install without checksum verification.
+#                           Only for a release that genuinely lacks checksums.txt.
 #
 # The release assets are public, so no token or authentication is needed.
-# Every download is verified against the release's checksums.txt.
+# Every download is verified against the release's checksums.txt, and the
+# install stops if verification is impossible.
+#
+# Once installed, homeyctl v1.5.0 and later upgrade themselves with
+# `homeyctl upgrade`.
 
 set -eu
 
@@ -74,25 +79,27 @@ echo "Downloading ${BIN_NAME} ${version} (darwin/${arch})..."
 fetch "${base}/${asset}" "${tmp}/${asset}" || die "download failed: ${base}/${asset}"
 
 # Verify against the release checksums rather than trusting the transfer alone.
-if fetch "${base}/checksums.txt" "${tmp}/checksums.txt" 2>/dev/null; then
-	expected=$(grep " ${asset}\$" "${tmp}/checksums.txt" | awk '{print $1}' | head -1)
-	if [ -n "$expected" ]; then
-		if command -v shasum >/dev/null 2>&1; then
-			actual=$(shasum -a 256 "${tmp}/${asset}" | awk '{print $1}')
-		elif command -v sha256sum >/dev/null 2>&1; then
-			actual=$(sha256sum "${tmp}/${asset}" | awk '{print $1}')
-		else
-			actual=""
-		fi
-		if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
-			die "checksum mismatch for ${asset}: expected ${expected}, got ${actual}"
-		fi
-		[ -n "$actual" ] && echo "Checksum verified."
-	else
-		echo "install.sh: warning: ${asset} not listed in checksums.txt" >&2
-	fi
+# This runs as `curl | sh`, so an unverifiable binary is refused, not installed
+# with a warning nobody reads. HOMEYCTL_SKIP_CHECKSUM=1 is the deliberate way out.
+skip_hint="set HOMEYCTL_SKIP_CHECKSUM=1 to install anyway"
+if [ "${HOMEYCTL_SKIP_CHECKSUM:-}" = "1" ]; then
+	echo "install.sh: warning: HOMEYCTL_SKIP_CHECKSUM=1; installing WITHOUT checksum verification" >&2
 else
-	echo "install.sh: warning: could not fetch checksums.txt; skipping verification" >&2
+	fetch "${base}/checksums.txt" "${tmp}/checksums.txt" 2>/dev/null ||
+		die "could not fetch checksums.txt for ${version}; refusing to install unverified (${skip_hint})"
+	expected=$(grep " ${asset}\$" "${tmp}/checksums.txt" | awk '{print $1}' | head -1)
+	[ -n "$expected" ] ||
+		die "${asset} is not listed in checksums.txt; refusing to install unverified (${skip_hint})"
+	if command -v shasum >/dev/null 2>&1; then
+		actual=$(shasum -a 256 "${tmp}/${asset}" | awk '{print $1}')
+	elif command -v sha256sum >/dev/null 2>&1; then
+		actual=$(sha256sum "${tmp}/${asset}" | awk '{print $1}')
+	else
+		die "neither shasum nor sha256sum is available to verify the download (${skip_hint})"
+	fi
+	[ "$actual" = "$expected" ] ||
+		die "checksum mismatch for ${asset}: expected ${expected}, got ${actual}"
+	echo "Checksum verified."
 fi
 
 install -m 0755 "${tmp}/${asset}" "${bin_dir}/${BIN_NAME}"
@@ -118,3 +125,8 @@ if command -v which >/dev/null 2>&1; then
 fi
 
 "${bin_dir}/${BIN_NAME}" --version || true
+
+echo
+echo "Next steps:"
+echo "  homeyctl install-skill --force   # Install or refresh the bundled AI skill"
+echo "  homeyctl completion zsh --help   # Shell completion setup (also bash, fish)"

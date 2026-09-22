@@ -15,12 +15,51 @@ curl -fsSL https://raw.githubusercontent.com/fishfisher/homeyctl/main/install.sh
 ```
 
 Fetches the latest release, verifies it against the release checksums, and installs
-to `~/.local/bin`. Run the same command again to upgrade. Override with
-`HOMEYCTL_VERSION=v1.4.0` or `HOMEYCTL_BIN_DIR=~/bin`.
+to `~/.local/bin`. Override with `HOMEYCTL_VERSION=v1.4.0` or
+`HOMEYCTL_BIN_DIR=~/bin`. The install stops if the checksum cannot be verified;
+`HOMEYCTL_SKIP_CHECKSUM=1` overrides that for a release that genuinely lacks
+`checksums.txt`.
 
 If `~/.local/bin` is not on your `PATH`, the script says so; add it to your shell
 profile. It installs outside Homebrew's prefix on purpose, so `brew` never manages
 or removes the binary.
+
+### Upgrading
+
+```bash
+homeyctl upgrade                   # Latest release, verified, replaced atomically
+homeyctl upgrade --check           # Report only; exits 1 when behind
+homeyctl upgrade --tag v1.4.0      # A specific release
+homeyctl install-skill --force     # Then refresh the bundled AI skill
+```
+
+homeyctl also checks for a newer release at most once a day, in the background,
+and prints one line to stderr when you are behind. It never delays a command and
+stays silent offline. Turn it off with `homeyctl config set-update-check off` or
+`HOMEYCTL_NO_UPDATE_CHECK=1`. Versions before v1.5.0 have no `upgrade` command;
+rerun the install script once to get it.
+
+### Shell completion
+
+Completion covers every command and flag:
+
+```bash
+# zsh (add to ~/.zshrc)
+source <(homeyctl completion zsh)
+
+# bash, fish, powershell
+homeyctl completion bash --help
+```
+
+### Uninstalling
+
+```bash
+rm ~/.local/bin/homeyctl
+rm -rf ~/Library/Application\ Support/homeyctl   # Config, token, and flow backups
+```
+
+The second line deletes your flow backups too; keep that directory if you might
+need to restore a flow.
 
 ### Download a binary
 
