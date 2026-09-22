@@ -300,6 +300,11 @@ func runAPIKey(token string) error {
 	}
 
 	loadedCfg.Token = token
+	if loadedCfg.EffectiveMode() == "cloud" {
+		loadedCfg.Cloud.Token = token
+	} else {
+		loadedCfg.Local.Token = token
+	}
 
 	if err := config.Save(loadedCfg); err != nil {
 		return err
@@ -469,7 +474,7 @@ Examples:
 		// Try to use existing config, or do OAuth login
 		existingCfg, _ := config.Load()
 
-		needsOAuth := existingCfg == nil || existingCfg.Token == ""
+		needsOAuth := !isConfigured(existingCfg)
 
 		if !needsOAuth {
 			// Check if current token can manage PATs by listing them

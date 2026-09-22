@@ -1,0 +1,19 @@
+{
+  "name": "AI draft — manual delay scaffold",
+  "enabled": false,
+  "cards": {
+    "7e5f5a90-9d21-4ab1-9e73-142d8024b184": {
+      "type": "start", "x": 100, "y": 200,
+      "outputSuccess": ["0e142530-4e23-4eae-b084-c2c433c8bd01"]
+    },
+    "0e142530-4e23-4eae-b084-c2c433c8bd01": {
+      "type": "delay", "x": 450, "y": 200,
+      "args": {"delay": {"number": "5", "multiplier": 1}}
+    },
+    "d3b67ed2-6b58-42d0-8714-b82b7e01d786": {
+      "type": "note", "x": 100, "y": 20, "width": 700, "height": 120,
+      "color": "yellow",
+      "value": "Draft scaffold. Discover and add the intended cards, generate new UUIDs, validate online, and create with --ai. This scaffold has no device actions."
+    }
+  }
+}

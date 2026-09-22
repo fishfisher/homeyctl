@@ -2,6 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"math"
+	"strconv"
+
+	"github.com/fishfisher/homeyctl/internal/logic"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -17,8 +21,7 @@ func parseValue(valueStr string) interface{} {
 	}
 
 	// Try as number
-	var num float64
-	if _, err := fmt.Sscanf(valueStr, "%f", &num); err == nil {
+	if num, err := strconv.ParseFloat(valueStr, 64); err == nil && !math.IsNaN(num) && !math.IsInf(num, 0) {
 		return num
 	}
 
@@ -46,6 +49,21 @@ Examples:
 		}
 
 		value := parseValue(valueStr)
+		definition, exists := device.CapabilitiesObj[capability]
+		if !exists {
+			return fmt.Errorf("device %q has no capability %q", device.Name, capability)
+		}
+		if definition.Type != "" && definition.Type != "enum" {
+			value, err = logic.ParseValue(definition.Type, valueStr)
+			if err != nil {
+				return err
+			}
+		} else if definition.Type == "enum" {
+			value = valueStr
+		}
+		if err := validateCapabilityValue(definition, value); err != nil {
+			return fmt.Errorf("%s.%s: %w", device.Name, capability, err)
+		}
 
 		if err := apiClient.SetCapability(device.ID, capability, value); err != nil {
 			return err
@@ -94,6 +112,9 @@ func setDeviceOnOff(nameOrID string, on bool) error {
 	if _, hasOnOff := device.CapabilitiesObj["onoff"]; !hasOnOff {
 		return fmt.Errorf("device '%s' does not support on/off", device.Name)
 	}
+	if err := validateCapabilityValue(device.CapabilitiesObj["onoff"], on); err != nil {
+		return err
+	}
 
 	if err := apiClient.SetCapability(device.ID, "onoff", on); err != nil {
 		return err
@@ -104,6 +125,29 @@ func setDeviceOnOff(nameOrID string, on bool) error {
 		state = "off"
 	}
 	color.Green("Turned %s %s\n", device.Name, state)
+	return nil
+}
+
+func validateCapabilityValue(capability Capability, value any) error {
+	if capability.Setable != nil && !*capability.Setable {
+		return fmt.Errorf("capability is read-only")
+	}
+	if number, ok := value.(float64); ok {
+		if capability.Min != nil && number < *capability.Min {
+			return fmt.Errorf("value is below minimum %g", *capability.Min)
+		}
+		if capability.Max != nil && number > *capability.Max {
+			return fmt.Errorf("value is above maximum %g", *capability.Max)
+		}
+	}
+	if capability.Type == "enum" && len(capability.Values) > 0 {
+		for _, option := range capability.Values {
+			if value == option.ID {
+				return nil
+			}
+		}
+		return fmt.Errorf("value is not an allowed enum option")
+	}
 	return nil
 }
 

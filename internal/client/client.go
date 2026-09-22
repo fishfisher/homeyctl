@@ -25,6 +25,8 @@ func New(cfg *config.Config) *Client {
 		token:   cfg.EffectiveToken(),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			// Do not forward credentials or replay writes to a redirected endpoint.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 }
@@ -61,7 +63,7 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body := string(respBody)
 		if resp.StatusCode == 403 && strings.Contains(body, "Missing Scopes") {
 			return nil, fmt.Errorf("missing scopes: your token doesn't have permission for this operation.\nOAuth tokens have limited scopes. Use an API key for full access:\n  homeyctl auth api-key <key>\nCreate one at: my.homey.app → Settings → API Keys")
@@ -129,8 +131,16 @@ func (c *Client) GetFlows() (json.RawMessage, error) {
 	return c.doRequest("GET", "/api/manager/flow/flow/", nil)
 }
 
+func (c *Client) GetFlow(id string) (json.RawMessage, error) {
+	return c.doRequest("GET", "/api/manager/flow/flow/"+id, nil)
+}
+
 func (c *Client) GetAdvancedFlows() (json.RawMessage, error) {
 	return c.doRequest("GET", "/api/manager/flow/advancedflow/", nil)
+}
+
+func (c *Client) GetAdvancedFlow(id string) (json.RawMessage, error) {
+	return c.doRequest("GET", "/api/manager/flow/advancedflow/"+id, nil)
 }
 
 func (c *Client) TriggerFlow(id string) error {

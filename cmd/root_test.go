@@ -1,9 +1,46 @@
 package cmd
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/fishfisher/homeyctl/internal/config"
 )
+
+func TestIsConfigured(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{name: "nil config", cfg: nil, want: false},
+		{name: "empty config", cfg: &config.Config{}, want: false},
+		{name: "legacy token", cfg: &config.Config{Token: "legacy"}, want: true},
+		{
+			name: "local token",
+			cfg: &config.Config{
+				Mode:  "local",
+				Local: config.LocalConfig{Token: "local"},
+			},
+			want: true,
+		},
+		{
+			name: "cloud token",
+			cfg: &config.Config{
+				Mode:  "cloud",
+				Cloud: config.CloudConfig{Token: "cloud"},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isConfigured(tt.cfg); got != tt.want {
+				t.Fatalf("isConfigured() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestCommandSkipsConfigLoading(t *testing.T) {
 	// Commands that should skip config loading (don't need API client)
@@ -75,20 +112,4 @@ func TestFlowsCreateRequiresClient(t *testing.T) {
 	if flowsCreate {
 		t.Error("flows create should NOT skip config loading (needs apiClient)")
 	}
-}
-
-// shouldSkipConfigLoading mirrors the logic in PersistentPreRunE
-// This allows us to test the logic without executing actual commands
-func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
-	if cmdName == "config" || cmdName == "version" || cmdName == "help" ||
-		cmdName == "set-host" || cmdName == "show" ||
-		cmdName == "completion" || cmdName == "install-skill" ||
-		cmdName == "auth" || cmdName == "login" || cmdName == "api-key" ||
-		cmdName == "status" || cmdName == "scopes" ||
-		strings.HasPrefix(cmdPath, "homeyctl auth") ||
-		cmdPath == "homeyctl" {
-		return true
-	}
-
-	return false
 }

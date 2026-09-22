@@ -91,9 +91,11 @@ Device groups are virtual devices that control multiple physical devices togethe
 	},
 }
 
-var groupCreateClass string
-var groupCreateZone string
-var groupCreateDevices string
+var (
+	groupCreateClass   string
+	groupCreateZone    string
+	groupCreateDevices string
+)
 
 var devicesGroupsCreateCmd = &cobra.Command{
 	Use:   "create <name>",
@@ -167,9 +169,11 @@ Examples:
 	},
 }
 
-var groupUpdateName string
-var groupUpdateAddDevices string
-var groupUpdateRemoveDevices string
+var (
+	groupUpdateName          string
+	groupUpdateAddDevices    string
+	groupUpdateRemoveDevices string
+)
 
 var devicesGroupsUpdateCmd = &cobra.Command{
 	Use:   "update <group>",

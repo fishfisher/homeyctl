@@ -3,14 +3,18 @@ package oauth
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -102,32 +106,30 @@ func Login() (*Homey, error) {
 	codeChan := make(chan string, 1)
 	errChan := make(chan error, 1)
 
-	// Start local server
-	server := &http.Server{Addr: ":8484"}
-	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			errChan <- fmt.Errorf("no authorization code received")
-			fmt.Fprintf(w, "<html><body><h1>Error</h1><p>No authorization code received.</p></body></html>")
-			return
-		}
-		codeChan <- code
-		fmt.Fprintf(w, "<html><body><h1>Success!</h1><p>You can close this window and return to the terminal.</p></body></html>")
-	})
+	state := rand.Text()
+	mux := http.NewServeMux()
+	mux.Handle("/callback", callbackHandler(state, codeChan, errChan))
+	listener, err := net.Listen("tcp", "127.0.0.1:8484")
+	if err != nil {
+		return nil, fmt.Errorf("cannot listen for OAuth callback: %w", err)
+	}
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	defer server.Close()
 
 	go func() {
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		if err := server.Serve(listener); err != http.ErrServerClosed {
 			errChan <- err
 		}
 	}()
 
 	// Build authorization URL (Athom uses 'scopes' not standard 'scope')
 	scopes := strings.Join(AllScopes, " ")
-	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scopes=%s",
+	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&response_type=code&scopes=%s&state=%s",
 		AuthURL,
 		ClientID,
 		url.QueryEscape(RedirectURI),
 		url.QueryEscape(scopes),
+		url.QueryEscape(state),
 	)
 
 	// Open browser
@@ -236,6 +238,52 @@ func Login() (*Homey, error) {
 	return &selectedHomey, nil
 }
 
+func callbackHandler(state string, codes chan<- string, failures chan<- error) http.Handler {
+	var once sync.Once
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("state")), []byte(state)) != 1 {
+			http.Error(w, "Invalid OAuth state", http.StatusBadRequest)
+			return
+		}
+		code := r.URL.Query().Get("code")
+		if code == "" && r.URL.Query().Get("error") == "" {
+			http.Error(w, "Missing authorization code", http.StatusBadRequest)
+			return
+		}
+		accepted := false
+		once.Do(func() {
+			accepted = true
+			if code == "" {
+				select {
+				case failures <- fmt.Errorf("authorization was denied by the provider"):
+				default:
+				}
+			} else {
+				select {
+				case codes <- code:
+				default:
+				}
+			}
+		})
+		if !accepted {
+			http.Error(w, "Callback already received", http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = fmt.Fprint(w, "<html><body><p>You can close this window and return to the terminal.</p></body></html>")
+	})
+}
+
+var oauthHTTPClient = &http.Client{
+	Timeout:       30 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+}
+
 func exchangeCodeForToken(code string) (*TokenResponse, error) {
 	data := url.Values{
 		"client_id":     {ClientID},
@@ -244,7 +292,7 @@ func exchangeCodeForToken(code string) (*TokenResponse, error) {
 		"code":          {code},
 	}
 
-	resp, err := http.PostForm(TokenURL, data)
+	resp, err := oauthHTTPClient.PostForm(TokenURL, data)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +322,7 @@ func getUser(accessToken string) (*User, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +352,7 @@ func getDelegationToken(accessToken string) (string, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -342,7 +390,7 @@ func loginToHomey(homeyURL, delegationToken string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}

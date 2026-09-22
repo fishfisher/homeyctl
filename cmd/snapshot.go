@@ -43,8 +43,12 @@ Examples:
 		// Parse for counting
 		var zones map[string]interface{}
 		var devices map[string]interface{}
-		json.Unmarshal(zonesData, &zones)
-		json.Unmarshal(devicesData, &devices)
+		if err := json.Unmarshal(zonesData, &zones); err != nil {
+			return fmt.Errorf("invalid zones response: %w", err)
+		}
+		if err := json.Unmarshal(devicesData, &devices); err != nil {
+			return fmt.Errorf("invalid devices response: %w", err)
+		}
 
 		snapshot := map[string]json.RawMessage{
 			"system":  systemData,
@@ -68,13 +72,18 @@ Examples:
 		}
 
 		if isJSON() {
-			out, _ := json.MarshalIndent(snapshot, "", "  ")
+			out, err := json.MarshalIndent(snapshot, "", "  ")
+			if err != nil {
+				return fmt.Errorf("invalid snapshot response: %w", err)
+			}
 			fmt.Println(string(out))
 			return nil
 		}
 
 		var system map[string]interface{}
-		json.Unmarshal(systemData, &system)
+		if err := json.Unmarshal(systemData, &system); err != nil {
+			return fmt.Errorf("invalid system response: %w", err)
+		}
 
 		color.New(color.Bold).Println("Homey Snapshot")
 		fmt.Println("==============")
@@ -87,8 +96,12 @@ Examples:
 
 		if snapshotIncludeFlows {
 			var flows, advFlows map[string]interface{}
-			json.Unmarshal(snapshot["flows"], &flows)
-			json.Unmarshal(snapshot["advancedFlows"], &advFlows)
+			if err := json.Unmarshal(snapshot["flows"], &flows); err != nil {
+				return fmt.Errorf("invalid flows response: %w", err)
+			}
+			if err := json.Unmarshal(snapshot["advancedFlows"], &advFlows); err != nil {
+				return fmt.Errorf("invalid advanced flows response: %w", err)
+			}
 			fmt.Printf("Flows:     %d\n", len(flows))
 			fmt.Printf("Advanced:  %d\n", len(advFlows))
 		}

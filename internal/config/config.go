@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -16,7 +18,8 @@ type LocalConfig struct {
 
 // CloudConfig holds settings for cloud connection
 type CloudConfig struct {
-	Token string `mapstructure:"token"` // Cloud token/PAT
+	Token   string `mapstructure:"token"`   // Cloud token/PAT
+	Address string `mapstructure:"address"` // The selected Homey's remote API URL
 }
 
 type Config struct {
@@ -39,7 +42,7 @@ func (c *Config) BaseURL() string {
 
 	if mode == "local" {
 		if c.Local.Address != "" {
-			return c.Local.Address
+			return strings.TrimRight(c.Local.Address, "/")
 		}
 		// Fall back to legacy host/port if local address not set
 		scheme := "http"
@@ -49,9 +52,28 @@ func (c *Config) BaseURL() string {
 		return fmt.Sprintf("%s://%s:%d", scheme, c.Host, c.Port)
 	}
 
-	// Cloud mode - use Homey cloud API
-	// Note: Cloud API requires different handling, this is a placeholder
-	return "https://api.athom.com"
+	return strings.TrimRight(c.Cloud.Address, "/")
+}
+
+func (c *Config) ValidateEndpoint() error {
+	mode := c.EffectiveMode()
+	if mode != "local" && mode != "cloud" {
+		return fmt.Errorf("invalid connection mode %q", mode)
+	}
+	if mode == "cloud" && c.Cloud.Address == "" {
+		return fmt.Errorf("cloud mode requires the selected Homey's remote API address; set HOMEY_CLOUD_ADDRESS or run config set-cloud <key> --address <https-url>")
+	}
+	address, err := url.Parse(c.BaseURL())
+	if err != nil || address.Hostname() == "" || (address.Scheme != "http" && address.Scheme != "https") {
+		return fmt.Errorf("homey address must be an absolute http(s) URL")
+	}
+	if address.User != nil || address.RawQuery != "" || address.Fragment != "" {
+		return fmt.Errorf("homey address must not contain credentials, query parameters, or a fragment")
+	}
+	if mode == "cloud" && address.Scheme != "https" {
+		return fmt.Errorf("cloud address must use HTTPS")
+	}
+	return nil
 }
 
 // EffectiveMode returns the actual mode to use (resolves "auto")
@@ -63,7 +85,7 @@ func (c *Config) EffectiveMode() string {
 
 	if mode == "auto" {
 		// Prefer local if address or legacy host is configured
-		if c.Local.Address != "" || c.Host != "localhost" {
+		if c.Local.Address != "" || (c.Host != "" && c.Host != "localhost") {
 			return "local"
 		}
 		if c.Cloud.Token != "" {
@@ -143,9 +165,10 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("port")
 	_ = viper.BindEnv("format")
 	_ = viper.BindEnv("mode")
-	_ = viper.BindEnv("address")       // HOMEY_ADDRESS for local mode
-	_ = viper.BindEnv("local.token")   // HOMEY_LOCAL_TOKEN
-	_ = viper.BindEnv("local.address") // HOMEY_LOCAL_ADDRESS
+	_ = viper.BindEnv("local.token", "HOMEY_LOCAL_TOKEN")
+	_ = viper.BindEnv("local.address", "HOMEY_LOCAL_ADDRESS", "HOMEY_ADDRESS")
+	_ = viper.BindEnv("cloud.token", "HOMEY_CLOUD_TOKEN")
+	_ = viper.BindEnv("cloud.address", "HOMEY_CLOUD_ADDRESS")
 
 	// Defaults
 	viper.SetDefault("host", "localhost")
@@ -175,7 +198,7 @@ func Save(cfg *Config) error {
 	}
 
 	dir := filepath.Join(configDir, "homeyctl")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
 
@@ -191,7 +214,12 @@ func Save(cfg *Config) error {
 	viper.Set("local.address", cfg.Local.Address)
 	viper.Set("local.token", cfg.Local.Token)
 	viper.Set("cloud.token", cfg.Cloud.Token)
+	viper.Set("cloud.address", cfg.Cloud.Address)
 
 	configPath := filepath.Join(dir, "config.toml")
-	return viper.WriteConfigAs(configPath)
+	viper.SetConfigPermissions(0o600)
+	if err := viper.WriteConfigAs(configPath); err != nil {
+		return err
+	}
+	return os.Chmod(configPath, 0o600)
 }

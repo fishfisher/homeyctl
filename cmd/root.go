@@ -80,10 +80,14 @@ var rootCmd = &cobra.Command{
 	Short:   "CLI for Homey smart home",
 	Long:    `A command-line interface for controlling Homey devices, flows, and more.`,
 	Version: buildVersion(),
+	// A runtime failure is not a usage mistake. Printing the whole flag block
+	// after every network or validation error buries the message that matters,
+	// especially for agents reading this output.
+	SilenceUsage: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if configured, show setup instructions if not
 		loadedCfg, _ := config.Load()
-		if loadedCfg == nil || loadedCfg.Token == "" {
+		if !isConfigured(loadedCfg) {
 			// Check for legacy config and show migration instructions
 			config.CheckLegacyConfig()
 			fmt.Print(setupInstructions)
@@ -93,15 +97,19 @@ var rootCmd = &cobra.Command{
 		cmd.Help()
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Skip config for config, auth, and version commands
-		cmdPath := cmd.CommandPath()
-		if cmd.Name() == "config" || cmd.Name() == "version" || cmd.Name() == "help" ||
-			cmd.Name() == "set-host" || cmd.Name() == "show" ||
-			cmd.Name() == "completion" || cmd.Name() == "install-skill" ||
-			cmd.Name() == "auth" || cmd.Name() == "login" || cmd.Name() == "api-key" ||
-			cmd.Name() == "status" || cmd.Name() == "scopes" ||
-			strings.HasPrefix(cmdPath, "homeyctl auth") ||
-			cmdPath == "homeyctl" {
+		if cmd.CommandPath() == "homeyctl flows validate" {
+			online, _ := cmd.Flags().GetBool("online")
+			if !online {
+				return nil
+			}
+		}
+		if cmd.CommandPath() == "homeyctl flows create" {
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			if dryRun {
+				return nil
+			}
+		}
+		if shouldSkipConfigLoading(cmd.CommandPath(), cmd.Name()) {
 			return nil
 		}
 
@@ -111,13 +119,31 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		if cfg.Token == "" {
+		if !isConfigured(cfg) {
 			return fmt.Errorf("no API token configured. Run: homeyctl auth")
+		}
+		if err := cfg.ValidateEndpoint(); err != nil {
+			return err
 		}
 
 		apiClient = client.New(cfg)
 		return nil
 	},
+}
+
+func isConfigured(cfg *config.Config) bool {
+	return cfg != nil && cfg.EffectiveToken() != ""
+}
+
+func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
+	return cmdName == "config" || cmdName == "version" || cmdName == "help" ||
+		cmdName == "set-host" || cmdName == "show" ||
+		cmdName == "completion" || cmdName == "install-skill" ||
+		cmdName == "auth" || cmdName == "login" || cmdName == "api-key" ||
+		cmdName == "status" || cmdName == "scopes" ||
+		strings.HasPrefix(cmdPath, "homeyctl auth") ||
+		strings.HasPrefix(cmdPath, "homeyctl config") ||
+		cmdPath == "homeyctl"
 }
 
 func Execute() {

@@ -13,15 +13,15 @@ func TestMaskToken_Empty(t *testing.T) {
 
 func TestMaskToken_Short(t *testing.T) {
 	result := maskToken("short")
-	if result != "short" {
-		t.Errorf("maskToken(\"short\") = %q, want %q", result, "short")
+	if result != "(set, redacted)" {
+		t.Errorf("short token was not fully redacted: %q", result)
 	}
 }
 
 func TestMaskToken_Long(t *testing.T) {
 	token := "abcdefghijklmnopqrstuvwxyz"
 	result := maskToken(token)
-	expected := "abcdefgh...stuvwxyz" // first 8 + ... + last 8
+	expected := "(set, redacted)"
 	if result != expected {
 		t.Errorf("maskToken(long) = %q, want %q", result, expected)
 	}
