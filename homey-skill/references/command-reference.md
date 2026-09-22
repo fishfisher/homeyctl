@@ -19,6 +19,7 @@ Configuration lives in the OS user-config directory. On macOS: `~/Library/Applic
 ```bash
 homeyctl snapshot --include-flows --json
 homeyctl devices list --match kitchen --json
+homeyctl devices list --zone "Living room" --json   # Includes zones beneath it
 homeyctl devices get <id> --json
 homeyctl devices values <id> --json
 homeyctl zones list --json

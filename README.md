@@ -237,6 +237,7 @@ The most commonly used commands for controlling your smart home.
 # List and search
 homeyctl devices list                        # List all devices
 homeyctl devices list --match "kitchen"      # Filter by name
+homeyctl devices list --zone "Hovedetasje"   # A zone and every zone beneath it
 homeyctl devices get "Device Name"           # Get device details
 homeyctl devices values "Device Name"        # Get all capability values
 
@@ -526,8 +527,8 @@ homeyctl devices list --json | jq '.[] | select(.name | test("light";"i"))'
 # Names of broken flows
 homeyctl flows list --json | jq -r '.[] | select(.broken) | .name'
 
-# Get device IDs in a zone
-homeyctl devices list --json | jq '.[] | select(.zone == "zone-id") | .id'
+# Device IDs on a floor, including its rooms
+homeyctl devices list --zone "Hovedetasje" --json | jq -r '.[].id'
 ```
 
 ---
