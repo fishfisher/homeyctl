@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
+
+	flowvalidation "github.com/fishfisher/homeyctl/internal/flow"
 )
 
 type Flow struct {
@@ -65,13 +68,17 @@ func findFlow(nameOrID string) (*foundFlow, error) {
 		return nil, fmt.Errorf("failed to parse advanced flows: %w", err)
 	}
 
+	var matches []*foundFlow
 	for _, raw := range normalFlows {
 		var f Flow
 		if err := json.Unmarshal(raw, &f); err != nil {
 			continue
 		}
-		if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-			return &foundFlow{ID: f.ID, Name: f.Name, Advanced: false, Raw: raw}, nil
+		if f.ID == nameOrID {
+			return fetchFlow(f.ID, f.Name, false)
+		}
+		if strings.EqualFold(f.Name, nameOrID) {
+			matches = append(matches, &foundFlow{ID: f.ID, Name: f.Name, Advanced: false})
 		}
 	}
 
@@ -80,12 +87,42 @@ func findFlow(nameOrID string) (*foundFlow, error) {
 		if err := json.Unmarshal(raw, &f); err != nil {
 			continue
 		}
-		if f.ID == nameOrID || strings.EqualFold(f.Name, nameOrID) {
-			return &foundFlow{ID: f.ID, Name: f.Name, Advanced: true, Raw: raw}, nil
+		if f.ID == nameOrID {
+			return fetchFlow(f.ID, f.Name, true)
+		}
+		if strings.EqualFold(f.Name, nameOrID) {
+			matches = append(matches, &foundFlow{ID: f.ID, Name: f.Name, Advanced: true})
 		}
 	}
 
-	return nil, fmt.Errorf("flow not found: %s", nameOrID)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("flow not found: %s", nameOrID)
+	}
+	if len(matches) > 1 {
+		ids := make([]string, 0, len(matches))
+		for _, match := range matches {
+			ids = append(ids, fmt.Sprintf("%s (%s)", match.ID, map[bool]string{true: "advanced", false: "simple"}[match.Advanced]))
+		}
+		sort.Strings(ids)
+		return nil, fmt.Errorf("flow name %q is ambiguous; use an ID: %s", nameOrID, strings.Join(ids, ", "))
+	}
+	return fetchFlow(matches[0].ID, matches[0].Name, matches[0].Advanced)
+}
+
+func fetchFlow(id, name string, advanced bool) (*foundFlow, error) {
+	var (
+		raw json.RawMessage
+		err error
+	)
+	if advanced {
+		raw, err = apiClient.GetAdvancedFlow(id)
+	} else {
+		raw, err = apiClient.GetFlow(id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch complete flow %q: %w", name, err)
+	}
+	return &foundFlow{ID: id, Name: name, Advanced: advanced, Raw: raw}, nil
 }
 
 // FlowListItem is the unified output format for flows
@@ -121,11 +158,15 @@ Examples:
 
 		var normalFlows map[string]Flow
 		var advancedFlows map[string]AdvancedFlow
-		json.Unmarshal(normalData, &normalFlows)
-		json.Unmarshal(advancedData, &advancedFlows)
+		if err := json.Unmarshal(normalData, &normalFlows); err != nil {
+			return fmt.Errorf("invalid flows response: %w", err)
+		}
+		if err := json.Unmarshal(advancedData, &advancedFlows); err != nil {
+			return fmt.Errorf("invalid advanced flows response: %w", err)
+		}
 
 		// Build flat list with optional filtering
-		var allFlows []FlowListItem
+		allFlows := make([]FlowListItem, 0)
 		for _, f := range normalFlows {
 			if flowsMatchFilter == "" || strings.Contains(strings.ToLower(f.Name), strings.ToLower(flowsMatchFilter)) {
 				allFlows = append(allFlows, FlowListItem{
@@ -151,6 +192,12 @@ Examples:
 			}
 		}
 
+		sort.Slice(allFlows, func(i, j int) bool {
+			if allFlows[i].Name == allFlows[j].Name {
+				return allFlows[i].ID < allFlows[j].ID
+			}
+			return allFlows[i].Name < allFlows[j].Name
+		})
 		if isJSON() {
 			out, _ := json.MarshalIndent(allFlows, "", "  ")
 			fmt.Println(string(out))
@@ -295,10 +342,43 @@ Examples:
 		if err := json.Unmarshal(data, &flow); err != nil {
 			return fmt.Errorf("invalid JSON: %w", err)
 		}
+		if flow == nil {
+			return fmt.Errorf("flow must be a JSON object")
+		}
+		if _, exists := flow["cards"]; exists {
+			advanced = true
+		}
+		if err := flowvalidation.ValidatePatch(flow, advanced); err != nil {
+			return err
+		}
+		flow = flowvalidation.MergeUpdate(nil, flow, advanced)
+		ai, _ := cmd.Flags().GetBool("ai")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		folderName, _ := cmd.Flags().GetString("ai-folder")
+		if ai {
+			flow["enabled"] = false
+		}
+		if !advanced {
+			normalizeSimpleFlow(flow)
+		}
 
 		// Validate flow structure
 		if err := validateFlow(flow, advanced); err != nil {
 			return err
+		}
+		report := flowvalidation.Validate(flow, advanced)
+		if err := requireValidFlow(report); err != nil {
+			return err
+		}
+		if dryRun {
+			return printFlowPlan("create", advanced, flow, report, map[string]any{"ai": ai, "aiFolder": folderName})
+		}
+		if ai {
+			folderID, err := ensureAIFlowFolder(folderName)
+			if err != nil {
+				return err
+			}
+			flow["folder"] = folderID
 		}
 
 		// Normalize simple flow structure (add required group fields)
@@ -322,6 +402,16 @@ Examples:
 		}
 		if err := json.Unmarshal(result, &created); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if created.ID == "" {
+			return fmt.Errorf("create response has no ID; inspect flows before retrying")
+		}
+		if err := verifyFlowWrite(created.ID, flow, advanced); err != nil {
+			return fmt.Errorf("flow %s was created but verification failed; inspect before retrying: %w", created.ID, err)
+		}
+		if isJSON() {
+			outputJSON(result)
+			return nil
 		}
 
 		flowType := "flow"
@@ -402,55 +492,13 @@ func validateFlow(flow map[string]interface{}, advanced bool) error {
 	return nil
 }
 
-// validateAdvancedFlowUpdate checks that cards in an advanced flow update
-// have the required fields to avoid breaking the flow canvas.
-// Homey merges at the card-ID level, so sending a card with only "args"
-// will wipe id, type, ownerUri, x, y — leaving a broken flow.
-func validateAdvancedFlowUpdate(flow map[string]interface{}) error {
-	cards, ok := flow["cards"].(map[string]interface{})
-	if !ok {
-		return nil // no cards in update, safe
-	}
-
-	for cardID, cardRaw := range cards {
-		card, ok := cardRaw.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		cardType, _ := card["type"].(string)
-
-		// Start cards only need "type"
-		if cardType == "start" {
-			continue
-		}
-
-		// Action/condition/trigger cards need these fields
-		var missing []string
-		if _, ok := card["id"]; !ok {
-			missing = append(missing, "id")
-		}
-		if cardType == "" {
-			missing = append(missing, "type")
-		}
-		if _, ok := card["ownerUri"]; !ok {
-			missing = append(missing, "ownerUri")
-		}
-
-		if len(missing) > 0 {
-			return fmt.Errorf("validation error: card %q is missing required fields: %s\n"+
-				"Homey replaces entire cards during merge updates. Include all fields (id, type, ownerUri, x, y)\n"+
-				"or use --backup to save the current flow first, then provide the complete card object.\n"+
-				"Tip: run 'homeyctl flows get <flow>' to see the full card structure",
-				cardID, strings.Join(missing, ", "))
-		}
-	}
-
-	return nil
-}
-
 // normalizeSimpleFlow adds required fields that Homey expects
 func normalizeSimpleFlow(flow map[string]interface{}) {
+	for _, field := range []string{"conditions", "actions"} {
+		if _, exists := flow[field]; !exists {
+			flow[field] = []any{}
+		}
+	}
 	// Add group to conditions
 	if conditions, ok := flow["conditions"].([]interface{}); ok {
 		for _, c := range conditions {
@@ -478,20 +526,30 @@ func normalizeSimpleFlow(flow map[string]interface{}) {
 }
 
 // backupFlow saves the current flow state to a JSON file and returns the path.
-func backupFlow(name string, rawData json.RawMessage) (string, error) {
+var backupFlow = saveBackup
+
+func saveBackup(name string, rawData json.RawMessage) (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to find config dir: %w", err)
 	}
 
 	backupDir := filepath.Join(configDir, "homeyctl", "backups")
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		return "", fmt.Errorf("failed to create backup dir: %w", err)
 	}
 
 	// Sanitize name for filename
-	safeName := strings.NewReplacer(" ", "_", "/", "_").Replace(name)
-	timestamp := time.Now().Format("20060102-150405")
+	safeName := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, name)
+	if len(safeName) > 80 {
+		safeName = safeName[:80]
+	}
+	timestamp := time.Now().UTC().Format("20060102T150405.000000000Z")
 	filename := fmt.Sprintf("%s_%s.json", safeName, timestamp)
 	path := filepath.Join(backupDir, filename)
 
@@ -502,7 +560,7 @@ func backupFlow(name string, rawData json.RawMessage) (string, error) {
 	}
 	formatted, _ := json.MarshalIndent(pretty, "", "  ")
 
-	if err := os.WriteFile(path, formatted, 0o644); err != nil {
+	if err := os.WriteFile(path, formatted, 0o600); err != nil {
 		return "", fmt.Errorf("failed to write backup: %w", err)
 	}
 
@@ -518,7 +576,8 @@ IMPORTANT: This does a partial/merge update - only fields you include will be
 changed. Fields you omit keep their existing values. To remove conditions or
 actions, explicitly set them to an empty array: "conditions": []
 
-Use --backup to save the current flow state before applying changes.
+The current flow is ALWAYS backed up before applying changes. If backup fails,
+the update is cancelled. Use --dry-run to preview without writing anything.
 Backups are stored in ~/Library/Application Support/homeyctl/backups/.
 
 Examples:
@@ -527,8 +586,8 @@ Examples:
   # Edit flow.json
   homeyctl flows update "My Flow" flow.json
 
-  # Update with backup (recommended)
-  homeyctl flows update --backup "My Flow" flow.json
+  # Preview the merged result without writing anything
+  homeyctl flows update --dry-run "My Flow" flow.json
 
   # Inline JSON via --data
   homeyctl flows update "My Flow" --data '{"name": "New Name"}'
@@ -541,7 +600,7 @@ Examples:
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nameOrID := args[0]
-		backup, _ := cmd.Flags().GetBool("backup")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		dataFlag, _ := cmd.Flags().GetString("data")
 
 		var data []byte
@@ -574,32 +633,62 @@ Examples:
 			return err
 		}
 
-		if backup {
-			path, err := backupFlow(f.Name, f.Raw)
-			if err != nil {
-				return fmt.Errorf("backup failed: %w", err)
-			}
-			color.Yellow("Backed up to: %s\n", path)
+		var current map[string]any
+		if err := json.Unmarshal(f.Raw, &current); err != nil {
+			return err
 		}
-
+		if err := flowvalidation.ValidatePatch(flow, f.Advanced); err != nil {
+			return err
+		}
+		replaceCards, _ := cmd.Flags().GetBool("replace-cards")
+		if replaceCards && f.Advanced {
+			cards, ok := flow["cards"].(map[string]any)
+			if !ok {
+				return fmt.Errorf("--replace-cards requires a complete cards object")
+			}
+			if currentCards, ok := current["cards"].(map[string]any); ok {
+				for id := range currentCards {
+					if _, exists := cards[id]; !exists {
+						cards[id] = nil
+					}
+				}
+			}
+		}
+		merged := flowvalidation.MergeUpdate(current, flow, f.Advanced)
+		if !f.Advanced {
+			normalizeSimpleFlow(merged)
+		}
+		report := flowvalidation.Validate(merged, f.Advanced)
+		if err := requireValidFlow(report); err != nil {
+			return err
+		}
+		if dryRun {
+			return printFlowPlan("update", f.Advanced, merged, report, map[string]any{"id": f.ID, "before": current})
+		}
+		backupPath, err := backupFlow(f.Name, f.Raw)
+		if err != nil {
+			return fmt.Errorf("update cancelled: backup failed: %w", err)
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "Backup: %s\n", backupPath)
+		// Send the complete validated graph. Null entries are a CLI patch
+		// convention and must never be forwarded as invalid Homey cards.
+		payload := merged
+		var result json.RawMessage
 		if f.Advanced {
-			if err := validateAdvancedFlowUpdate(flow); err != nil {
-				return err
-			}
-			if _, err := apiClient.UpdateAdvancedFlow(f.ID, flow); err != nil {
-				return err
-			}
-			color.Green("Updated advanced flow: %s\n", f.Name)
+			result, err = apiClient.UpdateAdvancedFlow(f.ID, payload)
 		} else {
-			if err := validateFlow(flow, false); err != nil {
-				return err
-			}
-			normalizeSimpleFlow(flow)
-			if _, err := apiClient.UpdateFlow(f.ID, flow); err != nil {
-				return err
-			}
-			color.Green("Updated flow: %s\n", f.Name)
+			result, err = apiClient.UpdateFlow(f.ID, payload)
 		}
+		if err != nil {
+			return fmt.Errorf("update failed (backup: %s): %w", backupPath, err)
+		}
+		if err := verifyFlowWrite(f.ID, merged, f.Advanced); err != nil {
+			return fmt.Errorf("update applied but read-back differs (backup: %s); inspect before retrying: %w", backupPath, err)
+		}
+		if isJSON() {
+			return printJSONValue(map[string]any{"flow": result, "backup": backupPath})
+		}
+		color.Green("Updated flow: %s\n", f.Name)
 		return nil
 	},
 }
@@ -609,11 +698,20 @@ var flowsDeleteCmd = &cobra.Command{
 	Short: "Delete a flow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		force, _ := cmd.Flags().GetBool("force")
+		if !force {
+			return fmt.Errorf("deleting a flow requires --force; its current state will be backed up first")
+		}
 		f, err := findFlow(args[0])
 		if err != nil {
 			return err
 		}
 
+		backupPath, err := backupFlow(f.Name, f.Raw)
+		if err != nil {
+			return fmt.Errorf("delete cancelled: backup failed: %w", err)
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "Backup: %s\n", backupPath)
 		if f.Advanced {
 			if err := apiClient.DeleteAdvancedFlow(f.ID); err != nil {
 				return err
@@ -673,29 +771,28 @@ Examples:
 			return err
 		}
 
-		if isJSON() {
-			outputJSON(data)
-			return nil
-		}
-
-		var cards []struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
-		}
+		var cards []map[string]any
 		if err := json.Unmarshal(data, &cards); err != nil {
 			return err
+		}
+		filtered := make([]map[string]any, 0, len(cards))
+		for _, card := range cards {
+			id, _ := card["id"].(string)
+			title, _ := card["title"].(string)
+			if filter == "" || strings.Contains(strings.ToLower(id), strings.ToLower(filter)) || strings.Contains(strings.ToLower(title), strings.ToLower(filter)) {
+				filtered = append(filtered, card)
+			}
+		}
+		if isJSON() {
+			return printJSONValue(filtered)
 		}
 
 		headerFmt := color.New(color.FgCyan, color.Underline).SprintfFunc()
 		tbl := table.New("Title", "ID")
 		tbl.WithHeaderFormatter(headerFmt)
 
-		for _, c := range cards {
-			if filter != "" && !strings.Contains(strings.ToLower(c.ID), strings.ToLower(filter)) &&
-				!strings.Contains(strings.ToLower(c.Title), strings.ToLower(filter)) {
-				continue
-			}
-			tbl.AddRow(c.Title, c.ID)
+		for _, card := range filtered {
+			tbl.AddRow(card["title"], card["id"])
 		}
 		tbl.Print()
 		return nil
@@ -792,9 +889,18 @@ func init() {
 	flowsCmd.AddCommand(flowsCardsCmd)
 	flowsCmd.AddCommand(flowsAutocompleteCmd)
 
-	flowsUpdateCmd.Flags().Bool("backup", false, "Save current flow state before updating")
+	flowsUpdateCmd.Flags().Bool("backup", false, "Compatibility flag; backups are now always created")
+	// Kept so existing scripts keep working, but hidden from help so it no
+	// longer reads as something the user has to opt into.
+	_ = flowsUpdateCmd.Flags().MarkDeprecated("backup", "backups are always created")
+	flowsUpdateCmd.Flags().Bool("dry-run", false, "Validate and preview the merged flow without changes")
+	flowsUpdateCmd.Flags().Bool("replace-cards", false, "Replace the entire advanced graph, including removal of omitted cards")
 	flowsUpdateCmd.Flags().String("data", "", "Inline JSON data for the update")
 	flowsCreateCmd.Flags().Bool("advanced", false, "Create an advanced flow")
+	flowsCreateCmd.Flags().Bool("ai", false, "Create disabled in the AI Flows review folder")
+	flowsCreateCmd.Flags().String("ai-folder", "AI Flows", "Review folder for --ai (created if missing)")
+	flowsCreateCmd.Flags().Bool("dry-run", false, "Validate and preview without creating a flow or folder")
+	flowsDeleteCmd.Flags().Bool("force", false, "Confirm deletion (automatic backup required)")
 	flowsCardsCmd.Flags().String("type", "action", "Card type: trigger, condition, action")
 	flowsCardsCmd.Flags().String("filter", "", "Filter cards by name or ID")
 

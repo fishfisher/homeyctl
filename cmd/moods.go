@@ -13,11 +13,11 @@ import (
 
 // Mood represents a Homey mood
 type Mood struct {
-	ID     string                 `json:"id"`
-	Name   string                 `json:"name"`
-	Preset string                 `json:"preset"`
-	Zone   string                 `json:"zone"`
-	Active bool                   `json:"active"`
+	ID      string                 `json:"id"`
+	Name    string                 `json:"name"`
+	Preset  string                 `json:"preset"`
+	Zone    string                 `json:"zone"`
+	Active  bool                   `json:"active"`
 	Devices map[string]interface{} `json:"devices"`
 }
 

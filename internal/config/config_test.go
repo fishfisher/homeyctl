@@ -2,6 +2,8 @@ package config
 
 import (
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestBaseURL(t *testing.T) {
@@ -195,5 +197,28 @@ func TestBaseURLLocalFallsBackToLegacy(t *testing.T) {
 	expected := "http://192.168.1.100:4859"
 	if got := cfg.BaseURL(); got != expected {
 		t.Errorf("BaseURL() = %q, want %q", got, expected)
+	}
+}
+
+func TestLoadNestedEnvironmentVariables(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	t.Setenv("HOMEY_MODE", "local")
+	t.Setenv("HOMEY_LOCAL_ADDRESS", "http://192.168.1.50")
+	t.Setenv("HOMEY_LOCAL_TOKEN", "local-token")
+	t.Setenv("HOMEY_CLOUD_TOKEN", "cloud-token")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Local.Address != "http://192.168.1.50" {
+		t.Errorf("Local.Address = %q", cfg.Local.Address)
+	}
+	if cfg.Local.Token != "local-token" {
+		t.Errorf("Local.Token = %q", cfg.Local.Token)
+	}
+	if cfg.Cloud.Token != "cloud-token" {
+		t.Errorf("Cloud.Token = %q", cfg.Cloud.Token)
 	}
 }

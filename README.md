@@ -8,27 +8,43 @@ A command-line interface for controlling [Homey](https://homey.app) smart home d
 
 ## Installation
 
-### Homebrew (macOS/Linux)
+### Install script (macOS)
 
 ```bash
-brew install fishfisher/tap/homeyctl
+curl -fsSL https://raw.githubusercontent.com/fishfisher/homeyctl/main/install.sh | sh
 ```
 
-### Download Binary
+Fetches the latest release, verifies it against the release checksums, and installs
+to the first writable of `/usr/local/bin`, `/opt/homebrew/bin`, or `~/.local/bin`.
+Run the same command again to upgrade. Override with `HOMEYCTL_VERSION=v1.4.0` or
+`HOMEYCTL_BIN_DIR=~/bin`.
 
-Download from [Releases](https://github.com/fishfisher/homeyctl/releases) and add to your PATH.
+### Download a binary
 
-### Build from Source
+Release assets are public, so no token is required:
+
+```bash
+gh release download --repo fishfisher/homeyctl -p 'homeyctl-darwin-arm64'
+chmod +x homeyctl-darwin-arm64 && mv homeyctl-darwin-arm64 /usr/local/bin/homeyctl
+```
+
+Or grab them from [Releases](https://github.com/fishfisher/homeyctl/releases).
+
+### Build from source
 
 ```bash
 go install github.com/fishfisher/homeyctl@latest
 ```
 
+> **Previously installed with Homebrew?** homeyctl is no longer published to
+> `fishfisher/homebrew-tap`. Run `brew uninstall homeyctl`, then use the install
+> script above. Binaries are ad-hoc signed by the Go toolchain and not notarized.
+
 ## Quick Start
 
 ```bash
 # Login with your Athom account (opens browser)
-homeyctl login
+homeyctl auth login
 
 # List your devices
 homeyctl devices list
@@ -47,7 +63,7 @@ homeyctl snapshot
 homeyctl supports local (LAN) and cloud connections:
 
 ```bash
-homeyctl config set-mode auto    # Prefer local, fallback to cloud (default)
+homeyctl config set-mode auto    # Choose configured local address first (no network failover)
 homeyctl config set-mode local   # Always use local
 homeyctl config set-mode cloud   # Always use cloud
 ```
@@ -65,7 +81,7 @@ homeyctl config discover         # Find Homey on local network (mDNS)
 homeyctl config set-local http://192.168.1.50 <token>
 
 # Cloud connection
-homeyctl config set-cloud <token>
+homeyctl config set-cloud <token> --address https://<homey-id>.connect.athom.com
 
 # View current config
 homeyctl config show
@@ -75,15 +91,87 @@ homeyctl config show
 
 ```bash
 # For AI bots (read-only, safe)
-homeyctl token create "AI Bot" --preset readonly --no-save
+homeyctl auth token create "AI Bot" --preset readonly --no-save
 
 # For automation (can control devices)
-homeyctl token create "Automation" --preset control --no-save
+homeyctl auth token create "Automation" --preset control --no-save
 ```
 
 Available presets: `readonly`, `control`, `full`
 
-Configuration is stored in `~/.config/homeyctl/config.toml`.
+Configuration is stored in your OS config directory. On macOS this is
+`~/Library/Application Support/homeyctl/config.toml`.
+
+Remote mode requires the selected Homey's HTTPS API address and a key accepted by
+that Homey. It does not send Homey device-manager requests to the Athom account API.
+Use `HOMEY_CLOUD_ADDRESS` and `HOMEY_CLOUD_TOKEN` to configure this via the environment.
+Configuration tokens are fully redacted in `config show`, and saved config files
+use owner-only permissions.
+
+> **Upgrading from 1.3.x:** cloud mode previously pointed at a placeholder Athom
+> account URL and never reached your Homey. It now requires an explicit address,
+> so a config with `mode = "cloud"` and no address fails with a clear message
+> instead of sending requests nowhere. Fix it once with
+> `homeyctl config set-cloud <key> --address https://<homey-id>.connect.athom.com`.
+> Local mode is unaffected.
+
+## AI flow builder
+
+The bundled [Homey skill](homey-skill/SKILL.md) covers discovery, Advanced Flow
+graphs, Logic variables, review, and recovery across shell-capable agents.
+
+```bash
+homeyctl install-skill --path ~/.agents/skills
+homeyctl flows validate draft.json --json          # Offline structure and graph checks
+homeyctl flows validate draft.json --online --json # Installed cards and Logic references
+homeyctl flows create draft.json --ai --dry-run     # Preview; no API calls or writes
+homeyctl flows create draft.json --ai --json        # Disabled, in the AI Flows folder
+homeyctl flows audit --json                        # Read-only review of existing flows
+homeyctl flows restore backup.json --dry-run       # Preview a restore from a backup
+```
+
+`--ai` overrides `enabled` to false and assigns the root-level `AI Flows` folder.
+The user can review the draft in Homey, then choose when to enable it and where
+to move it. Creating a draft does not authorize executing its physical actions.
+
+Every flow update and deletion first saves a full local backup, and aborts if
+the backup fails. Update previews show the merged before/after document. Writes
+are fetched again to verify the requested state and structure. Backups are under
+the OS config directory's `homeyctl/backups` and use owner-only file permissions.
+
+`homeyctl flows restore <backup-file>` applies a backup back onto its own flow as
+a complete document, so anything added since is removed. It backs up the current
+state first and reads the result back before reporting success. A deleted flow
+cannot be restored in place; its id is gone, so recreate it with `flows create`
+and repair references from other flows.
+
+```bash
+homeyctl flows update <flow-id> patch.json --dry-run
+homeyctl flows update <flow-id> patch.json --json
+# Restore a complete Advanced Flow graph after reviewing its enabled/folder fields:
+homeyctl flows update <flow-id> backup.json --replace-cards --dry-run
+```
+
+Advanced card entries replace whole card objects. Omitted cards are preserved;
+explicit null card entries remove them. `--replace-cards` also removes omitted
+cards and is intended for deliberate graph replacement or restoration. Flow
+deletion requires `--force`. Recreating a deleted flow gives it a new ID.
+
+Variable batches are planned before application:
+
+```bash
+homeyctl variables batch variables.json --prefix AI.Heating. --json
+```
+
+The manifest is an array of `{name,type,value,purpose}` entries. Matching names
+and types are reused without overwriting their values. Add `--apply` only after
+review. Ten or more new variables require per-variable purposes, explicit user
+approval, `--confirm-count`, and the plan's `--approve` hash. Thirty or more also
+require a namespace via `--prefix`. Partial applications leave a receipt for
+inspection and re-planning. These guards complement agent instructions; the CLI
+cannot independently establish that a human approved the operation.
+
+See the [audit report](docs/audit-2026-09.md) for scope, evidence, and limitations.
 
 ---
 
@@ -157,7 +245,7 @@ homeyctl flows trigger "Good Morning"        # Trigger manually
 homeyctl flows create flow.json              # Create from JSON
 homeyctl flows create --advanced flow.json   # Create advanced flow
 homeyctl flows update "Flow" changes.json    # Update (merge)
-homeyctl flows delete "Flow"                 # Delete
+homeyctl flows delete "Flow" --force         # Back up, then delete
 
 # Flow cards (for creating flows)
 homeyctl flows cards --type trigger          # List triggers
@@ -205,8 +293,8 @@ Control room moods and ambiances.
 homeyctl moods list                          # List all moods
 homeyctl moods get "Relaxed"                 # Get mood details
 homeyctl moods set "Movie Night"             # Activate a mood
-homeyctl moods create "New Mood"             # Create
-homeyctl moods update "Mood" --name "New"    # Update
+homeyctl moods create "New Mood" mood.json   # Create
+homeyctl moods update "Mood" changes.json    # Update
 homeyctl moods delete "Mood"                 # Delete
 ```
 
@@ -280,7 +368,7 @@ Manage Homey users.
 homeyctl users list                          # List all users
 homeyctl users get "User Name"               # Get user details
 homeyctl users me                            # Get current user
-homeyctl users create "New User"             # Create user
+homeyctl users create --role guest           # Create guest invite
 homeyctl users delete "User"                 # Delete user
 ```
 
@@ -292,7 +380,7 @@ Manage Homey dashboards.
 homeyctl dashboards list                     # List dashboards
 homeyctl dashboards get "Dashboard"          # Get details
 homeyctl dashboards create "New Dashboard"   # Create
-homeyctl dashboards update "Dashboard" --name "New Name"
+homeyctl dashboards update "Dashboard" changes.json
 homeyctl dashboards delete "Dashboard"       # Delete
 ```
 
@@ -335,7 +423,7 @@ homeyctl variables list                      # List all
 homeyctl variables get "my_var"              # Get value
 homeyctl variables set "my_var" 42           # Set value
 homeyctl variables create "new_var" number 0 # Create
-homeyctl variables delete "my_var"           # Delete
+homeyctl variables delete "my_var" --force   # Back up, then delete
 ```
 
 ### System
@@ -451,5 +539,6 @@ All config options can be set via environment variables (prefix `HOMEY_`):
 export HOMEY_MODE=auto              # auto, local, or cloud
 export HOMEY_LOCAL_ADDRESS=http://192.168.1.50
 export HOMEY_LOCAL_TOKEN=your-local-token
+export HOMEY_CLOUD_TOKEN=your-cloud-token
+export HOMEY_CLOUD_ADDRESS=https://your-homey-id.connect.athom.com
 ```
-

@@ -35,7 +35,7 @@ This is a CLI tool for controlling Homey smart home devices via the local Homey 
 
 - `cmd/` - Cobra command definitions. Each file defines a command group (devices, flows, zones, etc.) with subcommands. Commands follow the pattern: `homeyctl <resource> <action> [args]`
 - `internal/client/` - HTTP client for Homey's REST API. All API calls go through `Client.doRequest()` which handles auth headers and error responses
-- `internal/config/` - Configuration management using Viper. Config stored in `~/.config/homeyctl/config.toml`
+- `internal/config/` - Configuration management using Viper. Config is stored in the OS config directory (`~/Library/Application Support/homeyctl/config.toml` on macOS)
 
 ### Adding New Commands
 
@@ -51,7 +51,12 @@ The client returns `json.RawMessage` for GET requests, allowing commands to pars
 
 ### Configuration
 
-Config is loaded in `PersistentPreRunE` on rootCmd. Commands that don't need API access (config, version, help, login, install-skill, create) skip loading. Environment variables prefixed with `HOMEY_` override config file values.
+Config is loaded in `PersistentPreRunE` on rootCmd. Configuration/auth setup, help, version, skill installation, offline flow validation, and flow-create dry-run do not require an API client. Normal flow creation does require one. Environment variables prefixed with `HOMEY_` override config file values.
+
+For AI flow work, read `homey-skill/SKILL.md`. Use `flows create --ai` for disabled
+drafts in AI Flows. Updates/deletions require automatic backups. Use
+`variables batch` and follow the skill's approval thresholds for persistent
+state. Never trigger or enable a draft without authorization for its effects.
 
 ### Authentication
 
@@ -105,9 +110,21 @@ Run `homeyctl install-skill` to install the embedded AI skill files to your AI t
 
 ## Release Process
 
+Distribution is GitHub Releases only. The repo is public, so release assets are
+downloadable without a token and there is no Homebrew tap to update.
+
 ```bash
-# Tag triggers GoReleaser + auto Homebrew tap update
+# Tag triggers the Release workflow, which runs GoReleaser
 git tag v0.x.x && git push origin v0.x.x
+
+# Or release locally (GITHUB_TOKEN must be set):
+goreleaser release --clean
 ```
 
-GoReleaser builds for darwin (amd64+arm64) and updates `fishfisher/homebrew-tap`.
+GoReleaser builds darwin amd64+arm64 binaries plus `checksums.txt` and attaches
+them to the release. Users install and upgrade with `install.sh`, which resolves
+the latest tag, verifies the checksum, and installs the binary.
+
+Verify the config with `goreleaser check` before tagging. Binaries are ad-hoc
+signed by the Go toolchain, not notarized; `install.sh` clears the quarantine
+attribute after download.

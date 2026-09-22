@@ -22,10 +22,7 @@ func maskToken(token string) string {
 	if token == "" {
 		return "(not set)"
 	}
-	if len(token) > 20 {
-		return token[:8] + "..." + token[len(token)-8:]
-	}
-	return token
+	return "(set, redacted)"
 }
 
 var configShowCmd = &cobra.Command{
@@ -46,7 +43,8 @@ var configShowCmd = &cobra.Command{
 					"token":   maskToken(loadedCfg.Local.Token),
 				},
 				"cloud": map[string]interface{}{
-					"token": maskToken(loadedCfg.Cloud.Token),
+					"token":   maskToken(loadedCfg.Cloud.Token),
+					"address": loadedCfg.Cloud.Address,
 				},
 				"legacy": map[string]interface{}{
 					"host":  loadedCfg.Host,
@@ -82,6 +80,7 @@ var configShowCmd = &cobra.Command{
 
 		fmt.Println("Cloud")
 		fmt.Println("-----")
+		fmt.Printf("Address:        %s\n", loadedCfg.Cloud.Address)
 		fmt.Printf("Token:          %s\n", maskToken(loadedCfg.Cloud.Token))
 		fmt.Println()
 
@@ -200,14 +199,14 @@ Examples:
 
 var configSetCloudCmd = &cobra.Command{
 	Use:   "set-cloud <token>",
-	Short: "Set cloud token",
-	Long: `Set the cloud token (PAT) for remote Homey access.
+	Short: "Set a Homey API key and its remote address",
+	Long: `Set an API key and the selected Homey's HTTPS API address for remote access.
 
 Create a cloud token at:
   https://my.homey.app → Select Homey → Settings → API Keys
 
 Examples:
-  homeyctl config set-cloud "your-cloud-token"`,
+  homeyctl config set-cloud "your-api-key" --address "https://<homey-id>.connect.athom.com"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		token := args[0]
@@ -218,6 +217,15 @@ Examples:
 		}
 
 		cfg.Cloud.Token = token
+		address, _ := cmd.Flags().GetString("address")
+		if address != "" {
+			cfg.Cloud.Address = address
+		}
+		check := *cfg
+		check.Mode = "cloud"
+		if err := check.ValidateEndpoint(); err != nil {
+			return err
+		}
 
 		if err := config.Save(cfg); err != nil {
 			return err
@@ -307,6 +315,7 @@ func init() {
 	configCmd.AddCommand(configSetModeCmd)
 	configCmd.AddCommand(configSetLocalCmd)
 	configCmd.AddCommand(configSetCloudCmd)
+	configSetCloudCmd.Flags().String("address", "", "Selected Homey's remote HTTPS API address")
 	configCmd.AddCommand(configDiscoverCmd)
 	configDiscoverCmd.Flags().IntVar(&discoverTimeout, "timeout", 5, "Discovery timeout in seconds")
 }

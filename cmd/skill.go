@@ -164,14 +164,14 @@ var installSkillCmd = &cobra.Command{
 
 		for _, f := range files {
 			dest := filepath.Join(destDir, f.relPath)
-			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 				return fmt.Errorf("creating directory: %w", err)
 			}
 			data, err := fs.ReadFile(skillFS, f.embPath)
 			if err != nil {
 				return fmt.Errorf("reading %s: %w", f.relPath, err)
 			}
-			if err := os.WriteFile(dest, data, 0644); err != nil {
+			if err := os.WriteFile(dest, data, 0o644); err != nil {
 				return fmt.Errorf("writing %s: %w", f.relPath, err)
 			}
 		}

@@ -25,21 +25,6 @@ archives:
   - formats: ['binary']
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
 
-brews:
-  - name: homeyctl
-    repository:
-      owner: fishfisher
-      name: homebrew-tap
-      token: "{{ .Env.GITHUB_TOKEN }}"
-    homepage: https://github.com/fishfisher/homeyctl
-    description: "CLI for controlling Homey smart home"
-    download_strategy: FishfisherPrivateReleaseDownloadStrategy
-    custom_require: lib/private_strategy
-    install: |
-      bin.install Dir["homeyctl*"].first => "homeyctl"
-    test: |
-      assert_match "homeyctl", shell_output("#{bin}/homeyctl version")
-
 changelog:
   sort: asc
   filters:

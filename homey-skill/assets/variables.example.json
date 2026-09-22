@@ -1,0 +1,8 @@
+[
+  {
+    "name": "AI.Heating.LivingRoom.ManualOverride",
+    "type": "boolean",
+    "value": false,
+    "purpose": "Prevent scheduled heating changes while the user override is active"
+  }
+]

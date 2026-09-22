@@ -29,12 +29,21 @@
 - Include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` when AI-assisted
 
 ## Configuration
-- Config file: `~/.config/homeyctl/config.toml`
-- Environment variables: `HOMEY_HOST`, `HOMEY_TOKEN`, `HOMEY_FORMAT`
-- Override config path: `--config /path/to/config.toml`
+- Config file: the OS config directory (`~/Library/Application Support/homeyctl/config.toml` on macOS)
+- Environment variables: `HOMEY_HOST`, `HOMEY_TOKEN`, `HOMEY_LOCAL_ADDRESS`, `HOMEY_LOCAL_TOKEN`, `HOMEY_CLOUD_TOKEN`, `HOMEY_FORMAT`
 
 ## Flow Creation (AI Agents)
 When creating flows via CLI:
+
+Read `homey-skill/SKILL.md` and its relevant references. Create new AI flows with
+`--ai` so they remain disabled in the AI Flows review folder. Validate locally
+and online before creation. Use `--dry-run` to preview changes. Existing flows
+must be backed up before every update/delete; the CLI enforces this.
+
+Use `variables batch` to plan persistent state. Follow the skill's approval
+thresholds for 5+, 10+, and 30+ new variables, counting the entire operation.
+Never bypass review by splitting batches or using raw API/HomeyScript writes.
+Do not trigger or enable drafts until the user authorizes their effects.
 
 1. **Discover IDs first:**
    ```bash

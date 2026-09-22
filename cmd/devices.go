@@ -21,9 +21,16 @@ type Device struct {
 
 // Capability represents a device capability
 type Capability struct {
-	ID    string      `json:"id"`
-	Value interface{} `json:"value"`
-	Title string      `json:"title"`
+	ID      string      `json:"id"`
+	Value   interface{} `json:"value"`
+	Title   string      `json:"title"`
+	Type    string      `json:"type,omitempty"`
+	Setable *bool       `json:"setable,omitempty"`
+	Min     *float64    `json:"min,omitempty"`
+	Max     *float64    `json:"max,omitempty"`
+	Values  []struct {
+		ID string `json:"id"`
+	} `json:"values,omitempty"`
 }
 
 var devicesCmd = &cobra.Command{
@@ -46,13 +53,22 @@ func findDevice(nameOrID string) (*Device, error) {
 		return nil, fmt.Errorf("failed to parse devices: %w", err)
 	}
 
+	var matches []Device
 	for _, d := range devices {
-		if d.ID == nameOrID || strings.EqualFold(d.Name, nameOrID) {
+		if d.ID == nameOrID {
 			return &d, nil
 		}
+		if strings.EqualFold(d.Name, nameOrID) {
+			matches = append(matches, d)
+		}
 	}
-
-	return nil, fmt.Errorf("device not found: %s", nameOrID)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("device not found: %s", nameOrID)
+	}
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("device name %q is ambiguous; use its ID", nameOrID)
+	}
+	return &matches[0], nil
 }
 
 var devicesListCmd = &cobra.Command{
@@ -111,8 +127,11 @@ var devicesGetCmd = &cobra.Command{
 		}
 
 		if isJSON() {
-			out, _ := json.MarshalIndent(device, "", "  ")
-			fmt.Println(string(out))
+			data, err := apiClient.GetDevice(device.ID)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
 			return nil
 		}
 
