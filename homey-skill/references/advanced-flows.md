@@ -17,7 +17,7 @@ Discover the target Homey's card definitions and inspect a related stored flow b
 | `any` | Join allowing an incoming branch to continue | `outputSuccess` |
 | `note` | `value`, `color`, optional `width` and `height` | None |
 
-Include numeric `x` and `y` coordinates on every card. Note colors observed in Homey are `yellow`, `red`, `green`, and `blue`. Preserve exported fields that the card uses, even if not shown in this summary.
+Include numeric `x` and `y` coordinates on every card; `homeyctl flows layout <file> --write` computes non-overlapping ones from the graph, so rough placeholders are fine while building. Regular cards render about 340 wide, ANY/ALL and start/delay as small pills. Note colors observed in Homey are `yellow`, `red`, `green`, and `blue`. Preserve exported fields that the card uses, even if not shown in this summary.
 
 Outputs are arrays of canvas-card keys, for example `"outputTrue": ["<next-card-key>"]`. Keep a condition's true and false branches distinct. Route error outputs deliberately where useful; an error path should not accidentally report successful execution. Every referenced target must exist. Do not connect execution edges to notes or trigger/start entry cards.
 

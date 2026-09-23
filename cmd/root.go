@@ -99,6 +99,9 @@ var rootCmd = &cobra.Command{
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		startUpdateCheck(cmd)
+		if cmd.CommandPath() == "homeyctl flows layout" {
+			return nil // offline: only rewrites positions in a local file
+		}
 		if cmd.CommandPath() == "homeyctl flows validate" {
 			online, _ := cmd.Flags().GetBool("online")
 			if !online {

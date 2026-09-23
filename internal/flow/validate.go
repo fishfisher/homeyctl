@@ -186,6 +186,7 @@ func validateAdvanced(document map[string]any, report *Report) {
 	}
 
 	validateReachability(cards, edges, roots, report)
+	validateOverlaps(cards, report)
 }
 
 func validateAdvancedCardFields(cardID, cardType string, card, cards map[string]any, report *Report) {

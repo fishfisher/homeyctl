@@ -53,6 +53,8 @@ A flow reporting `broken: false` is not proof that it references existing object
 
 Before writes, describe the intended behavior in the user's language. Include the trigger, important branches, affected devices, state changes, new-variable count, and whether existing flows are changed. Scale detail to the request. A simple light automation needs a short explanation; a multi-room heating controller needs an explicit design and failure behavior.
 
+Timeline messages are breadcrumbs for the user, not a debug log. By default, add one only to the outcomes a person would want to find afterwards: the automation acted on its own (heating lowered, lights switched off, an alarm raised), it returned to normal, or an error path that leaves a device in an unexpected state. Do not add one to routine branches, every trigger, or intermediate steps. If more than that seems useful, such as a message per branch while the user is still tuning thresholds, propose it as part of the design and let the user choose; say that messages are easy to remove later.
+
 Apply the approval rules in [safety.md](references/safety.md). Existing authorization remains valid for the stated scope. Do not ask repeatedly for the same approved action. Ask before expanding the scope, activating a draft, deleting user-owned objects, or introducing large amounts of persistent state.
 
 Use persistent Logic variables only when the automation actually needs state across executions or shared state across flows. Prefer a current device capability, an existing tag, a branch, or a local trigger token when it suffices. Read [logic-and-variables.md](references/logic-and-variables.md) before introducing variables.
@@ -73,11 +75,16 @@ After approval, use `--apply` and any required confirmation flags. Retain the re
 
 ## Build and validate the draft
 
-Generate stable UUIDs for new Advanced Flow cards. Lay out left to right, group related branches, and use notes to explain purpose and assumptions. Preserve existing card IDs and fields when editing. Separate normal, false, and error paths explicitly. Consider repeated triggers, manual overrides, stale sensor values, time boundaries, and how a delayed action should be cancelled or superseded.
+Generate stable UUIDs for new Advanced Flow cards. Preserve existing card IDs and fields when editing.
+
+Add notes where a reader of the canvas would otherwise have to reverse-engineer the intent: a threshold and why it was chosen, why a timer or variable exists, what a branch protects against, or a known limit. One short note (one to three sentences) above the card that starts a section is usually right; a flow with a few sections gets a few notes. Do not narrate every card, and do not put the whole design in one large note. Keep a note at most 400 wide so it stays with its card. Place each note just above the card it explains; the layout step keeps it there.
+
+Do not hand-tune coordinates. Once the graph is complete, run `homeyctl flows layout draft.json --write`: it arranges cards left to right in execution order, keeps chains level, stacks branches true above false above error, and keeps each note above its card. `flows validate` warns with `card_overlap` when estimated card rectangles intersect; card sizes are estimates, so a warning on a flow the user arranged by hand is a prompt to check, not something to fix unasked. Separate normal, false, and error paths explicitly. Consider repeated triggers, manual overrides, stale sensor values, time boundaries, and how a delayed action should be cancelled or superseded.
 
 Save the draft as a local JSON file. Validate and preview it:
 
 ```bash
+homeyctl flows layout draft.json --write
 homeyctl flows validate draft.json --json
 homeyctl flows validate draft.json --online --json
 homeyctl flows create draft.json --ai --dry-run

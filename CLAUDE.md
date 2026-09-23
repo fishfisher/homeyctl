@@ -122,8 +122,9 @@ goreleaser release --clean
 ```
 
 GoReleaser builds darwin amd64+arm64 binaries plus `checksums.txt` and attaches
-them to the release. Users install and upgrade with `install.sh`, which resolves
-the latest tag, verifies the checksum, and installs the binary.
+them to the release. Users install with `install.sh`, which resolves the latest
+tag, verifies the checksum, and installs the binary; from v1.5.0 they upgrade
+with `homeyctl upgrade`, which does the same in Go.
 
 Verify the config with `goreleaser check` before tagging. Binaries are ad-hoc
 signed by the Go toolchain, not notarized; `install.sh` clears the quarantine

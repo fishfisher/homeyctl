@@ -36,8 +36,9 @@
 When creating flows via CLI:
 
 Read `homey-skill/SKILL.md` and its relevant references. Create new AI flows with
-`--ai` so they remain disabled in the AI Flows review folder. Validate locally
-and online before creation. Use `--dry-run` to preview changes. Existing flows
+`--ai` so they remain disabled in the AI Flows review folder. Run
+`flows layout <file> --write` instead of hand-placing cards, then validate
+locally and online before creation. Use `--dry-run` to preview changes. Existing flows
 must be backed up before every update/delete; the CLI enforces this.
 
 Use `variables batch` to plan persistent state. Follow the skill's approval
