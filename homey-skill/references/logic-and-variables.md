@@ -39,7 +39,7 @@ Discover Logic trigger, condition, and action definitions using `flows cards`. R
 {"variable":{"id":"<discovered-variable-id>","name":"AI.Heating.LivingRoom.ManualOverride"}}
 ```
 
-For a global Logic droptoken use `homey:manager:logic|<variable-id>`. For an embedded tag in a text argument, the form commonly uses `[[homey:manager:logic:<variable-id>]]`. Preserve the distinction and check an exported working example when uncertain.
+For a global Logic droptoken use `homey:manager:logic|<variable-id>`. To embed the variable in a text argument, wrap the same reference in double brackets: `[[homey:manager:logic|<variable-id>]]`. The separator is a pipe in both; `flows validate` warns about a colon-only embedded tag, which does not resolve. When uncertain, check an exported working flow.
 
 Keep number and boolean arguments typed in JSON. `"false"` is a string, not a boolean. Validate existing variable IDs with `flows validate --online` after creation and before deploying the flow.
 
