@@ -164,6 +164,7 @@ graphs, Logic variables, review, and recovery across shell-capable agents.
 
 ```bash
 homeyctl install-skill --path ~/.agents/skills
+homeyctl flows layout draft.json --write          # Arrange cards left to right, no overlaps
 homeyctl flows validate draft.json --json          # Offline structure and graph checks
 homeyctl flows validate draft.json --online --json # Installed cards and Logic references
 homeyctl flows create draft.json --ai --dry-run     # Preview; no API calls or writes

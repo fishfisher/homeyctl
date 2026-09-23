@@ -38,6 +38,7 @@ homeyctl flows audit --json
 homeyctl flows audit --problems --json
 homeyctl flows cards --type action --filter logic --json
 homeyctl flows autocomplete <card-id> <arg-name> --type action --query text
+homeyctl flows layout draft.json --write   # Offline: arrange cards, no overlaps
 homeyctl flows validate draft.json --json
 homeyctl flows validate draft.json --online --json
 homeyctl flows create draft.json --ai --dry-run
