@@ -210,6 +210,18 @@ explicit null card entries remove them. `--replace-cards` also removes omitted
 cards and is intended for deliberate graph replacement or restoration. Flow
 deletion requires `--force`. Recreating a deleted flow gives it a new ID.
 
+To see which flows and HomeyScripts use a variable, and to find the ones
+nothing uses any more:
+
+```bash
+homeyctl variables usage AI.Heating.Window.Stuekrok.Delta
+homeyctl variables usage --prefix AI. --unused   # AI-built variables safe to remove
+```
+
+`variables delete` refuses while a variable is still in use; pass
+`--allow-referenced` to delete it anyway. Dashboards and other apps are not
+searched.
+
 Variable batches are planned before application:
 
 ```bash
@@ -294,6 +306,7 @@ homeyctl flows list --folder "Soverom"       # Only flows directly in a folder
 homeyctl flows list --disabled               # Or --enabled
 homeyctl flows get "Flow Name"               # Get flow details
 homeyctl flows audit --problems              # Validate; show only flows with findings
+homeyctl flows find --device "Stuekrok Ovn"  # Which flows use a device (also --variable, --flow, --id)
 
 # Control
 homeyctl flows trigger "Good Morning"        # Trigger manually

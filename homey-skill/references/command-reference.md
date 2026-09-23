@@ -52,6 +52,11 @@ homeyctl flows restore <backup-file> --dry-run
 homeyctl flows restore <backup-file> --json
 homeyctl flows folders list --json
 homeyctl variables list --json
+homeyctl variables usage --prefix AI. --json          # Where each AI variable is used
+homeyctl variables usage --prefix AI. --unused       # Candidates for cleanup
+homeyctl flows find --device <name-or-id> --json     # Flows that already control a device
+homeyctl flows find --variable <name-or-id> --json
+homeyctl flows find --flow <name-or-id> --json       # Flows that start/enable/check it
 homeyctl variables batch variables.json --json
 ```
 

@@ -43,7 +43,7 @@ homeyctl flows cards --type condition --json
 homeyctl flows cards --type action --json
 ```
 
-Filter large results locally or with supported filters. Inspect individual devices and existing flows that solve a similar problem. Use `homeyctl flows get <id>` to obtain the complete stored JSON. Prefer IDs for writes; names may collide across rooms or flow types.
+Filter large results locally or with supported filters. Inspect individual devices and existing flows that solve a similar problem. Before automating a device, run `homeyctl flows find --device <name-or-id>` to see which flows already control it, and `flows find --flow <name-or-id>` for flows that start, enable, or check a flow you plan to change: a new automation that fights an existing schedule, or an edit to a flow another flow depends on, is a design problem to raise before building. Use `homeyctl flows get <id>` to obtain the complete stored JSON. Prefer IDs for writes; names may collide across rooms or flow types.
 
 Never invent an installed card ID, capability, argument name, token, device ID, or variable ID. Inspect a card's full definition, including its argument types and tokens. Resolve autocomplete objects through `homeyctl flows autocomplete <card-id> <arg-name> --type <type>`. Preserve the full selected object when the card expects an object. A label alone is often insufficient.
 

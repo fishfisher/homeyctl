@@ -158,11 +158,17 @@ var varsCreateCmd = &cobra.Command{Use: "create <name> <type> <value>", Short: "
 	return printVariable(created)
 }}
 
-var varsDeleteCmd = &cobra.Command{Use: "delete <name-or-id>", Short: "Delete a variable after backup; requires --force", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+var varsDeleteCmd = &cobra.Command{Use: "delete <name-or-id>", Short: "Delete a variable after backup; requires --force", Long: `Delete a Logic variable. The variable is backed up first.
+
+Deletion is refused while any flow references the variable or a HomeyScript
+mentions it, because those would break silently: a recreated variable gets a
+new ID. The refusal lists them; see also variables usage. Pass
+--allow-referenced only when you have decided to break or repair them.`, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		return fmt.Errorf("deletion requires --force; inspect flows using this variable first")
+		return fmt.Errorf("deletion requires --force; check first with: homeyctl variables usage %q", args[0])
 	}
+	allowReferenced, _ := cmd.Flags().GetBool("allow-referenced")
 	variables, err := loadVariables()
 	if err != nil {
 		return err
@@ -170,6 +176,22 @@ var varsDeleteCmd = &cobra.Command{Use: "delete <name-or-id>", Short: "Delete a 
 	variable, err := resolveVariable(variables, args[0])
 	if err != nil {
 		return err
+	}
+	if !allowReferenced {
+		index, err := loadUsageIndexFunc()
+		if err != nil {
+			return fmt.Errorf("delete cancelled: could not check which flows use %q: %w (pass --allow-referenced to delete without checking)", variable.Name, err)
+		}
+		if u := index.find(variable.ID, variable.Name, ""); !u.empty() {
+			fmt.Fprintf(cmd.ErrOrStderr(), "%q is still in use:\n", variable.Name)
+			for _, f := range u.Flows {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  flow %q (%s)\n", f.Name, f.ID)
+			}
+			for _, sc := range u.Scripts {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  HomeyScript %q (matches its %s)\n", sc.Name, sc.Match)
+			}
+			return fmt.Errorf("delete cancelled: %q is used by %d flow(s) and %d HomeyScript(s); pass --allow-referenced to delete anyway", variable.Name, len(u.Flows), len(u.Scripts))
+		}
 	}
 	before, err := json.Marshal(variable)
 	if err != nil {
@@ -344,7 +366,8 @@ func saveVariableReceipt(path string, receipt map[string]any) error {
 func init() {
 	rootCmd.AddCommand(varsCmd)
 	varsCmd.AddCommand(varsListCmd, varsGetCmd, varsSetCmd, varsCreateCmd, varsDeleteCmd, varsBatchCmd)
-	varsDeleteCmd.Flags().Bool("force", false, "Confirm deletion after checking references")
+	varsDeleteCmd.Flags().Bool("force", false, "Confirm deletion")
+	varsDeleteCmd.Flags().Bool("allow-referenced", false, "Delete even though flows or HomeyScripts still use the variable")
 	varsBatchCmd.Flags().Bool("apply", false, "Apply a reviewed plan (default: read-only)")
 	varsBatchCmd.Flags().Int("confirm-count", 0, "Explicitly approved number of NEW variables for batches of 10+")
 	varsBatchCmd.Flags().String("approve", "", "Hash of the reviewed plan for batches of 10+")
