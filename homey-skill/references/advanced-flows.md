@@ -47,7 +47,7 @@ A delay uses a string number and numeric multiplier:
 
 Use the argument definition from the installed card. Autocomplete arguments usually need a selected object containing an ID and label, sometimes additional fields. `args.variable` commonly uses `{"id":"<logic-id>","name":"<name>"}`. Preserve number, boolean, and string JSON types.
 
-Global droptokens use `ownerUri|token`, for example `homey:device:<device-id>|measure_temperature` or `homey:manager:logic|<variable-id>`. Embedded global tags in strings commonly use `[[homey:manager:logic:<variable-id>]]`. Do not interchange embedded-tag and droptoken separators.
+Global droptokens use `ownerUri|token`, for example `homey:device:<device-id>|measure_temperature` or `homey:manager:logic|<variable-id>`. Global tags embedded in text use the same pipe inside double brackets: `[[homey:manager:logic|<variable-id>]]`, `[[homey:device:<device-id>|<capability>]]`, `[[homey:app:<app-id>|<token>]]`. A colon-only form such as `[[homey:manager:logic:<variable-id>]]` does not resolve; `flows validate` warns about it with `embedded_tag_separator`. Card IDs are the exception that does use colons (`homey:manager:logic:lt`); they are not tags.
 
 Advanced local tokens identify their producing card, for example `trigger::<canvas-key>::<token-name>`; action-produced tokens may use `action::...`. Verify the token exists in the card definition and is available on the branch that consumes it. A token from one trigger is not automatically available on a path entered through another trigger. Ordinary flows may use a bare trigger-token name such as `value`.
 

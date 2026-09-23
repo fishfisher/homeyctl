@@ -138,3 +138,54 @@ func TestMergeUpdate(t *testing.T) {
 		t.Fatal("new card was not added")
 	}
 }
+
+func TestEmbeddedTagSeparator(t *testing.T) {
+	const id = "465af688-79ae-4161-b166-c2560c48ae4b"
+	flow := func(text string) map[string]any {
+		return map[string]any{"name": "Tags", "cards": map[string]any{
+			"11111111-1111-4111-8111-111111111111": map[string]any{
+				"type": "trigger", "id": "homey:manager:flow:programmatic_trigger", "x": 0, "y": 0,
+				"outputSuccess": []any{"22222222-2222-4222-8222-222222222222"},
+			},
+			"22222222-2222-4222-8222-222222222222": map[string]any{
+				"type": "action", "id": "homey:manager:notifications:create_notification", "x": 500, "y": 0,
+				"args": map[string]any{"text": text},
+			},
+		}}
+	}
+	warned := func(r Report) bool {
+		for _, w := range r.Warnings {
+			if w.Code == "embedded_tag_separator" {
+				return true
+			}
+		}
+		return false
+	}
+	for _, ok := range []string{
+		"Delta [[homey:manager:logic|" + id + "]] °C",
+		"Track [[homey:device:" + id + "|speaker_track]]",
+		"Azimuth [[homey:app:com.cyclone-software.sunevents|azimuth]]",
+		"Local [[trigger::11111111-1111-4111-8111-111111111111::measure_temperature]]",
+		"No tags at all",
+	} {
+		if r := Validate(flow(ok), true); warned(r) {
+			t.Errorf("unexpected warning for %q: %+v", ok, r.Warnings)
+		}
+	}
+	for _, bad := range []string{
+		"Delta [[homey:manager:logic:" + id + "]] °C",
+		"Track [[homey:device:" + id + ":speaker_track]]",
+	} {
+		if r := Validate(flow(bad), true); !warned(r) {
+			t.Errorf("no warning for colon-form tag %q", bad)
+		}
+	}
+	// Simple flows are checked too.
+	simple := map[string]any{
+		"name": "S", "trigger": map[string]any{"id": "homey:manager:flow:programmatic_trigger"}, "conditions": []any{},
+		"actions": []any{map[string]any{"id": "homey:manager:notifications:create_notification", "args": map[string]any{"text": "[[homey:manager:logic:" + id + "]]"}}},
+	}
+	if r := Validate(simple, false); !warned(r) {
+		t.Error("no warning for colon-form tag in a simple flow")
+	}
+}

@@ -113,6 +113,7 @@ func validateSimpleCards(document map[string]any, field string, report *Report) 
 		if droptoken, exists := card["droptoken"]; exists {
 			validateDroptoken(droptoken, path+".droptoken", report)
 		}
+		validateEmbeddedTags(card["args"], path+".args", report)
 	}
 }
 
@@ -202,6 +203,7 @@ func validateAdvancedCardFields(cardID, cardType string, card, cards map[string]
 		if droptoken, exists := card["droptoken"]; exists {
 			validateDroptoken(droptoken, path+".droptoken", report)
 		}
+		validateEmbeddedTags(card["args"], path+".args", report)
 	case "delay":
 		args, ok := objectAt(card, "args")
 		if !ok {
@@ -273,6 +275,39 @@ func validateDroptoken(raw any, path string, report *Report) {
 	} // Simple-flow trigger token.
 	if !strings.Contains(token, "|") && !strings.HasPrefix(token, "trigger::") && !strings.HasPrefix(token, "action::") {
 		report.addError("invalid_droptoken", path, "droptoken must use ownerUri|token or trigger::<card-uuid>::<token>")
+	}
+}
+
+var embeddedTagPattern = regexp.MustCompile(`\[\[(homey:[^\]]*)\]\]`)
+
+// validateEmbeddedTags checks global tags embedded in text arguments, such as
+// "[[homey:manager:logic|<variable-id>]]". They use the same ownerUri|token
+// separator as droptokens; a colon-only form like
+// "[[homey:manager:logic:<id>]]" does not resolve. Every embedded global tag
+// in flows built in the Homey editor uses the pipe. Local tokens
+// ("[[trigger::<card>::<token>]]") are a different form and are not checked.
+func validateEmbeddedTags(raw any, path string, report *Report) {
+	switch value := raw.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(value))
+		for key := range value {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			validateEmbeddedTags(value[key], path+"."+key, report)
+		}
+	case []any:
+		for i, child := range value {
+			validateEmbeddedTags(child, fmt.Sprintf("%s[%d]", path, i), report)
+		}
+	case string:
+		for _, match := range embeddedTagPattern.FindAllStringSubmatch(value, -1) {
+			if !strings.Contains(match[1], "|") {
+				report.addWarning("embedded_tag_separator", path,
+					"embedded tag [["+match[1]+"]] has no | separator; global tags use [[ownerUri|token]], e.g. [[homey:manager:logic|<variable-id>]]")
+			}
+		}
 	}
 }
 
