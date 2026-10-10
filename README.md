@@ -78,9 +78,7 @@ Or grab them from [Releases](https://github.com/fishfisher/homeyctl/releases).
 go install github.com/fishfisher/homeyctl@latest
 ```
 
-> **Previously installed with Homebrew?** homeyctl is no longer published to
-> `fishfisher/homebrew-tap`. Run `brew uninstall homeyctl`, then use the install
-> script above. Binaries are ad-hoc signed by the Go toolchain and not notarized.
+> Binaries are ad-hoc signed by the Go toolchain and not notarized.
 
 ## Quick Start
 
