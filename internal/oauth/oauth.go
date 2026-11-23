@@ -204,7 +204,7 @@ func Login() (*Homey, error) {
 
 	// Try to get delegation token
 	fmt.Println("Getting delegation token...")
-	delegationToken, err := getDelegationToken(tokenResp.AccessToken)
+	delegationToken, err := getDelegationToken(tokenResp.AccessToken, selectedHomey.ID)
 	if err != nil {
 		fmt.Printf("Note: Delegation token not available (%v)\n", err)
 		fmt.Println("Trying to login with access token via remote URL...")
@@ -345,8 +345,11 @@ func getUser(accessToken string) (*User, error) {
 	return &user, nil
 }
 
-func getDelegationToken(accessToken string) (string, error) {
-	req, err := http.NewRequest("POST", "https://api.athom.com/delegation/token?audience=homey", nil)
+// getDelegationToken requests a short-lived token bound to a single Homey.
+// Athom will reject unbound requests (without homeyId) in the future.
+func getDelegationToken(accessToken, homeyID string) (string, error) {
+	query := url.Values{"audience": {"homey"}, "homeyId": {homeyID}}
+	req, err := http.NewRequest("POST", "https://api.athom.com/delegation/token?"+query.Encode(), nil)
 	if err != nil {
 		return "", err
 	}
