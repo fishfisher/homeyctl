@@ -64,7 +64,11 @@ All auth lives under `homeyctl auth`:
 
 1. **OAuth flow**: `homeyctl auth login`
    - Opens browser for Athom account login
-   - Creates a scoped PAT with "control" preset (includes `homey.flow`)
+   - Creates a PAT named `homeyctl (<hostname>)` with every scope the login holds,
+     replacing that machine's earlier one; fails with Homey's error rather than
+     saving the expiring OAuth session
+   - An OAuth login has `homey.flow.readonly` + `homey.flow.start`, not `homey.flow`:
+     flow editing needs an API key
    - Saves token to config automatically
    - OAuth client credentials are embedded in `internal/oauth/oauth.go`
 
@@ -81,8 +85,12 @@ homeyctl auth token create "AI Bot" --preset readonly --no-save
 
 **Scoped token presets**:
 - `readonly` - Can only read devices, flows, zones, etc. (safe for AI)
-- `control` - Can read + control devices, full flow access (`homey.flow`)
+- `control` - Can read + control devices, full flow access (`homey.flow`; an OAuth
+  session can only grant `homey.flow.readonly` + `homey.flow.start`)
 - `full` - Full access (same as owner)
+
+A PAT never gets more than the session creating it holds; `auth token create`
+drops what the session lacks and says so.
 
 PATs cannot create other PATs - OAuth session required for token management.
 

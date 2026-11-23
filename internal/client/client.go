@@ -390,6 +390,22 @@ func (c *Client) SetElectricityPriceFixed(price float64) error {
 
 // Personal Access Tokens (PAT)
 
+// GetSessionScopes returns the scopes the current session actually holds.
+// A PAT can never get more than these.
+func (c *Client) GetSessionScopes() ([]string, error) {
+	data, err := c.doRequest("GET", "/api/manager/sessions/session/me", nil)
+	if err != nil {
+		return nil, err
+	}
+	var session struct {
+		IntersectedScopes []string `json:"intersectedScopes"`
+	}
+	if err := json.Unmarshal(data, &session); err != nil {
+		return nil, fmt.Errorf("failed to parse session: %w", err)
+	}
+	return session.IntersectedScopes, nil
+}
+
 func (c *Client) ListPATs() (json.RawMessage, error) {
 	return c.doRequest("GET", "/api/manager/users/pat", nil)
 }

@@ -68,8 +68,8 @@ func TestCommandSkipsConfigLoading(t *testing.T) {
 		{"auth token", "homeyctl auth token", "token", true},
 		{"auth token create", "homeyctl auth token create", "create", true},
 		{"auth token scopes", "homeyctl auth token scopes", "scopes", true},
-		{"auth token list", "homeyctl auth token list", "list", true},
-		{"auth token delete", "homeyctl auth token delete", "delete", true},
+		{"auth token list", "homeyctl auth token list", "list", false}, // uses the saved login
+		{"auth token delete", "homeyctl auth token delete", "delete", false},
 
 		// Commands that should NOT skip config loading (need API client)
 		// This is the key fix for GitHub issues #4 and #5

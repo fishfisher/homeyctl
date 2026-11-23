@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -80,8 +81,9 @@ var availableScopes = []string{
 	"homey.zone.readonly",
 }
 
-// Scope presets for common use cases
-// Note: These must match scopes configured on the OAuth app at developer.athom.com
+// Scope presets for common use cases. A PAT only gets what the creating session
+// holds (see grantableScopes): an OAuth login has homey.flow.readonly and
+// homey.flow.start, not homey.flow, so "control" via OAuth cannot edit flows.
 var scopePresets = map[string][]string{
 	"readonly": {
 		"homey.device.readonly",
@@ -105,6 +107,113 @@ var scopePresets = map[string][]string{
 	"full": {
 		"homey", // Full access to everything
 	},
+}
+
+// grantableScopes narrows requested to what the session holds. Homey refuses a
+// PAT with any scope the session lacks ("Missing Scopes"). A requested scope the
+// session only holds parts of (homey.flow vs. homey.flow.readonly and
+// homey.flow.start) is replaced by those parts and reported as missing.
+func grantableScopes(requested, session []string) (granted, missing []string) {
+	covers := func(have, want string) bool {
+		return have == want || strings.HasPrefix(want, have+".")
+	}
+	seen := map[string]bool{}
+	add := func(scope string) {
+		if !seen[scope] {
+			seen[scope] = true
+			granted = append(granted, scope)
+		}
+	}
+	for _, want := range requested {
+		held := false
+		for _, have := range session {
+			if covers(have, want) {
+				held = true
+				break
+			}
+		}
+		if held {
+			add(want)
+			continue
+		}
+		missing = append(missing, want)
+		for _, have := range session {
+			if strings.HasPrefix(have, want+".") {
+				add(have)
+			}
+		}
+	}
+	return granted, missing
+}
+
+// createScopedPAT creates a PAT with as much of scopes as the session behind c
+// can grant, and returns the scopes it had to leave out.
+func createScopedPAT(c *client.Client, name string, scopes []string) (*PATCreateResponse, []string, error) {
+	sessionScopes, err := c.GetSessionScopes()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot read the session's scopes: %w", err)
+	}
+	granted, missing := grantableScopes(scopes, sessionScopes)
+	if len(granted) == 0 {
+		return nil, missing, fmt.Errorf("this session can grant none of the requested scopes: %s", strings.Join(scopes, ", "))
+	}
+	data, err := c.CreatePAT(name, granted)
+	if err != nil {
+		return nil, missing, err
+	}
+	var resp PATCreateResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, missing, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &resp, missing, nil
+}
+
+// parsePATs reads the PAT list, which Homey returns as an object keyed by ID.
+func parsePATs(data []byte) ([]PAT, error) {
+	var byID map[string]PAT
+	if err := json.Unmarshal(data, &byID); err == nil {
+		pats := make([]PAT, 0, len(byID))
+		for _, p := range byID {
+			pats = append(pats, p)
+		}
+		sort.Slice(pats, func(i, j int) bool { return pats[i].Name < pats[j].Name })
+		return pats, nil
+	}
+	var pats []PAT
+	if err := json.Unmarshal(data, &pats); err != nil {
+		return nil, fmt.Errorf("failed to parse tokens: %w", err)
+	}
+	return pats, nil
+}
+
+// loginPATName names the PAT a login creates after this machine, so logging in
+// again replaces this machine's token and never another machine's.
+func loginPATName() string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return "homeyctl"
+	}
+	return "homeyctl (" + strings.TrimSuffix(host, ".local") + ")"
+}
+
+// replaceOlderPATs deletes this machine's earlier login tokens (same name) once
+// the new one exists. Failing here only leaves an unused token behind.
+func replaceOlderPATs(c *client.Client, name, keepID string) {
+	data, err := c.ListPATs()
+	if err != nil {
+		return
+	}
+	pats, err := parsePATs(data)
+	if err != nil {
+		return
+	}
+	for _, p := range pats {
+		if p.Name == name && p.ID != keepID {
+			if err := c.DeletePAT(p.ID); err != nil {
+				fmt.Printf("Note: could not remove the old token %s: %v\n", p.ID, err)
+			}
+		}
+	}
 }
 
 var authCmd = &cobra.Command{
@@ -168,7 +277,7 @@ var authLoginCmd = &cobra.Command{
 
 This is the easiest way to get started with homeyctl:
   1. Opens your browser to log in with your Athom account
-  2. Creates an API token with device control access
+  2. Creates an API token with everything the login allows
   3. Saves it to your config
 
 After login, you can immediately use homeyctl:
@@ -218,30 +327,19 @@ use an API key instead: homeyctl auth api-key <key>`,
 			TLS:   parsedURL.Scheme == "https",
 		}
 
-		// Create a "control" preset token for the user
+		// A PAT never expires; the OAuth session behind it does. Without a PAT
+		// there is no durable login, so fail instead of saving the session.
 		tempClient := client.New(tempCfg)
-		scopes := scopePresets["control"]
-
-		data, err := tempClient.CreatePAT("homeyctl", scopes)
+		name := loginPATName()
+		// Ask for everything; the token gets all the login itself holds.
+		resp, missing, err := createScopedPAT(tempClient, name, scopePresets["full"])
 		if err != nil {
-			// If token creation fails, save the OAuth session token instead
-			// (less ideal but still works)
-			fmt.Println("Note: Could not create scoped token, using session token.")
-			if saveErr := config.Save(tempCfg); saveErr != nil {
-				return fmt.Errorf("failed to save config: %w", saveErr)
-			}
-			fmt.Println()
-			fmt.Printf("Logged in to: %s\n", homey.Name)
-			fmt.Println()
-			fmt.Println("You're ready to use homeyctl!")
-			fmt.Println("Try: homeyctl devices list")
-			return nil
+			return fmt.Errorf("could not create a token for homeyctl: %w\n\nUse an API key instead: homeyctl auth api-key <key>", err)
 		}
-
-		var resp PATCreateResponse
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if len(missing) > 0 {
+			fmt.Println("Note: a login has limited access (it cannot edit flows). For full access, use an API key: homeyctl auth api-key <key>")
 		}
+		replaceOlderPATs(tempClient, name, resp.ID)
 
 		// Save the PAT to config
 		newCfg := &config.Config{
@@ -398,9 +496,9 @@ var authTokenListCmd = &cobra.Command{
 			return nil
 		}
 
-		var pats []PAT
-		if err := json.Unmarshal(data, &pats); err != nil {
-			return fmt.Errorf("failed to parse tokens: %w", err)
+		pats, err := parsePATs(data)
+		if err != nil {
+			return err
 		}
 
 		if len(pats) == 0 {
@@ -433,6 +531,9 @@ Use --preset for common scope combinations:
   readonly  - Read-only access to devices, flows, zones, etc.
   control   - Read + control devices and full flow access
   full      - Full access (same as owner)
+
+A token only gets the scopes your login holds. An OAuth login cannot edit
+flows, so those scopes are left out and the command says which.
 
 Or use --scopes for specific scopes:
   --scopes homey.device.readonly,homey.flow.readonly
@@ -530,8 +631,7 @@ Examples:
 		}
 
 		// Create the PAT
-		tempClient := client.New(existingCfg)
-		data, err := tempClient.CreatePAT(name, scopes)
+		resp, missing, err := createScopedPAT(client.New(existingCfg), name, scopes)
 		if err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "Invalid Session Type") {
@@ -540,15 +640,10 @@ Examples:
 			if strings.Contains(errStr, "Must Be Owner") {
 				return fmt.Errorf("cannot create PAT: only the owner account can create tokens")
 			}
-			if strings.Contains(errStr, "Missing Scopes") {
-				return fmt.Errorf("cannot create PAT: the requested scopes are not available.\nTry a different preset or check available scopes with: homeyctl auth token scopes")
-			}
 			return fmt.Errorf("failed to create token: %w", err)
 		}
-
-		var resp PATCreateResponse
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if len(missing) > 0 {
+			fmt.Printf("Note: this session cannot grant %s, so the token does not have it.\n", strings.Join(missing, ", "))
 		}
 
 		fmt.Println()

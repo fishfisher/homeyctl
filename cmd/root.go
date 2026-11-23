@@ -144,6 +144,10 @@ func isConfigured(cfg *config.Config) bool {
 }
 
 func shouldSkipConfigLoading(cmdPath, cmdName string) bool {
+	// Listing and deleting tokens talk to Homey with the saved login.
+	if cmdPath == "homeyctl auth token list" || cmdPath == "homeyctl auth token delete" {
+		return false
+	}
 	return cmdName == "config" || cmdName == "version" || cmdName == "help" ||
 		cmdName == "set-host" || cmdName == "show" ||
 		cmdName == "completion" || cmdName == "install-skill" ||
